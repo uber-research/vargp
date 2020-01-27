@@ -12,58 +12,7 @@ import matplotlib.pylab as plt
 import random
 from plot_utils import colors, number_formatter
 import pdb
-
-
-def plot_prediction_four(pred_prob, x_train, y_train, X1, X2, zu, title):
-    n_classes = pred_prob.shape[1]
-    fig, axs = plt.subplots(1, n_classes, figsize=(10, 3.5))
-    levels = np.array([0.3, 0.5, 0.9])
-    if plt.rcParams["text.usetex"]:
-        fmt = r"%r"
-    else:
-        fmt = "%r"
-    for k in range(n_classes):
-        pred_prob_k = np.reshape(pred_prob[:, k], (X1.shape[0], X1.shape[1]))
-        imshow_handle = axs[k].imshow(
-            pred_prob_k,
-            extent=(X1.min(), X1.max(), X2.min(), X2.max()),
-            origin="lower",
-        )
-        ind = np.where(y_train == k)
-        axs[k].scatter(
-            x_train[ind, 0],
-            x_train[ind, 1],
-            marker="o",
-            s=25,
-            c="w",
-            edgecolors="k",
-            alpha=0.8,
-        )
-        axs[k].scatter(
-            zu[k, :, 0],
-            zu[k, :, 1],
-            marker="x",
-            s=15,
-            c="w",
-            edgecolors="k",
-            alpha=0.6,
-        )
-
-    ax = plt.axes([0.15, 0.04, 0.7, 0.02])
-    plt.title("Probability")
-    plt.colorbar(imshow_handle, cax=ax, orientation="horizontal")
-    for k in range(n_classes):
-        axs[k].set_xlabel("$x_1$")
-        if k == 0:
-            axs[k].set_ylabel("$x_2$")
-        axs[k].set_xlim(np.min(X1), np.max(X1))
-        axs[k].set_ylim(np.min(X2), np.max(X2))
-    # plt.title(title)
-    plt.savefig(
-        "/tmp/" + "prediction_cla_" + title + ".pdf",
-        bbox_inches="tight",
-        pad_inches=0,
-    )
+from test_cla_batch_ml import plot_prediction_four
 
 
 x_train, y_train, x_plot, X1, X2 = get_toy_cla_four()
