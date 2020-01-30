@@ -18,8 +18,9 @@ class RBFKernel(nn.Module):
         self.log_sf_mean = nn.Parameter(np.log(0.5) * torch.ones([1]))
         self.log_ls_logvar = nn.Parameter(-2 * torch.ones([input_dim]))
         self.log_sf_logvar = nn.Parameter(-2 * torch.ones([1]))
-        self.prior_mean = torch.Tensor([0.0])
-        self.prior_var = torch.Tensor([1.0])
+
+        self.register_buffer('prior_mean', torch.Tensor([0.0]))
+        self.register_buffer('prior_var', torch.Tensor([1.0]))
 
     def compute_kuu(self, x, kern_samples):
         x = x.unsqueeze(0)
@@ -49,11 +50,11 @@ class RBFKernel(nn.Module):
         return torch.exp(log_sf * 2.0)
 
     def sample_hypers(self, no_kern_samples):
-        log_sf_std = torch.sqrt(torch.exp(self.log_sf_logvar))
-        log_ls_std = torch.sqrt(torch.exp(self.log_ls_logvar))
-        eps_log_ls = torch.randn([no_kern_samples, self.input_dim])
+        log_sf_std = self.log_sf_logvar.exp().sqrt()
+        log_ls_std = self.log_ls_logvar.exp().sqrt()
+        eps_log_ls = torch.randn(no_kern_samples, self.input_dim, device=log_ls_std.device)
         log_ls = eps_log_ls * log_ls_std + self.log_ls_mean
-        eps_log_sf = torch.randn([no_kern_samples, 1])
+        eps_log_sf = torch.randn(no_kern_samples, 1, device=log_sf_std.device)
         log_sf = eps_log_sf * log_sf_std + self.log_sf_mean
         return log_ls, log_sf
 

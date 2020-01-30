@@ -9,7 +9,6 @@ import torch.distributions as dist
 from torch.distributions.kl import kl_divergence
 
 from models.hypers_vi.kernels import RBFKernel
-from data_utils import get_toy_cla_four
 
 
 def vec2tril(vec, m):
@@ -29,6 +28,9 @@ def vec2tril(vec, m):
 
   tril = torch.zeros(*batch_shape, m, m, device=vec.device)
   tril[..., idx[0], idx[1]] = vec
+
+  # ensure positivity constraint of cholesky diagonals
+  tril[..., range(m), range(m)] = F.softplus(tril[..., range(m), range(m)])
 
   return tril
 
@@ -52,7 +54,7 @@ class MulticlassSoftmax(nn.Module):
     '''
     n_hypers, out_size, B = mu.shape
 
-    eps = torch.randn(n_hypers, self.n_f, out_size, B)
+    eps = torch.randn(n_hypers, self.n_f, out_size, B, device=mu.device)
     f_samples = mu.unsqueeze(1) + var.sqrt().unsqueeze(1) * eps
 
     y_f = F.log_softmax(f_samples, dim=-2)
@@ -76,13 +78,29 @@ class MulticlassSoftmax(nn.Module):
                           reduction='none').mean(dim=-1).mean(dim=-1).sum(dim=0)
     return lik_loss
 
+  def predict(self, mu, var):
+    '''
+    Arguments:
+      mu: n_hypers x out_size x B
+      var: n_hypers x out_size x B
+
+    Returns
+      output probabilities B x out_size
+    '''
+    y_f = self(mu, var)
+
+    y = y_f.view(-1, *mu.shape[-2:])
+
+    log_probs = y.logsumexp(dim=0) - torch.tensor(y.size(0)).float().log()
+    return log_probs.exp().T
+
 
 class ContinualSVGP(nn.Module):
   '''
   Arguments:
     z: Initial inducing points out_size x M x in_size
   '''
-  def __init__(self, z, kernel, likelihood, n_hypers=1):
+  def __init__(self, z, kernel, likelihood, n_hypers=1, jitter=1e-4):
     super().__init__()
 
     self.M = z.size(-2)
@@ -102,7 +120,7 @@ class ContinualSVGP(nn.Module):
     self.u_mean = nn.Parameter(torch.Tensor(self.out_size, self.M, 1).normal_(0., .5))
     self.u_tril_vec = nn.Parameter(torch.ones(self.out_size, (self.M * (self.M + 1)) // 2))
 
-    self.jitter = 1e-4 * torch.eye(self.M)
+    self.register_buffer('jitter', jitter * torch.eye(self.M))
 
   def forward(self, x, info=False):
     '''
@@ -164,10 +182,14 @@ class ContinualSVGP(nn.Module):
     ## TODO(sanyam): add non-standard hyperprior
     kl_hypers = self.kernel.compute_kl()
 
-    return nll + kl_u + kl_hypers 
+    return nll + kl_u + kl_hypers
+
+  def predict(self, x):
+    pred_mu, pred_var = self(x)
+    return self.likelihood.predict(pred_mu, pred_var)
 
 
-def create_gp(in_size, out_size, M=10, n_f=3, n_hypers=5, max_val=3.):
+def create_gp(in_size, out_size, M=20, n_f=10, n_hypers=3, max_val=3.):
   z = (2. * torch.rand(out_size, M, in_size) - 1.) * max_val
   kernel = RBFKernel(in_size)
   likelihood = MulticlassSoftmax(n_f=n_f)
@@ -176,15 +198,20 @@ def create_gp(in_size, out_size, M=10, n_f=3, n_hypers=5, max_val=3.):
 
 
 def main():
-  x_train, y_train, *_ = get_toy_cla_four()
-  x_train = torch.from_numpy(x_train).float()
-  y_train_one_hot = torch.from_numpy(y_train).float()
+  device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+  from data_utils import get_toy_cla_four
+  x_train, y_train, x_test, X1, X2 = get_toy_cla_four()
+
+  x_train = torch.from_numpy(x_train).float().to(device)
+  x_test = torch.from_numpy(x_test).float().to(device)
+  y_train_one_hot = torch.from_numpy(y_train).float().to(device)
   y_train = y_train_one_hot.argmax(dim=-1)
 
-  gp = create_gp(x_train.size(-1), y_train_one_hot.size(-1))
+  gp = create_gp(x_train.size(-1), y_train_one_hot.size(-1)).to(device)
   optim = torch.optim.Adam(gp.parameters(), lr=1e-2)
 
-  for e in tqdm(range(10000)):
+  for e in tqdm(range(5000)):
     optim.zero_grad()
 
     lik_loss = gp.loss(x_train, y_train)
@@ -194,7 +221,18 @@ def main():
     optim.step()
 
     if (e + 1) % 500 == 0:
-      print(f'Epoch {e}/10000: {loss.detach().item()}')
+      print(f'Loss: {loss.detach().item()}')
+
+  with torch.no_grad():
+    y_pred = gp.predict(x_test)
+
+    from test_cla_batch_ml import plot_prediction_four
+    plot_prediction_four(
+        y_pred.cpu(),
+        x_train.cpu(), y_train.cpu(),
+        X1, X2,
+        gp.z.cpu().detach(), "four_batch_cgp"
+    )
 
 
 if __name__ == "__main__":
