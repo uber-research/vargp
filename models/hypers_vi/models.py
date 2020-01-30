@@ -94,8 +94,6 @@ class SparseGP(nn.Module):
     def loss(
         self, batch_state, batch_target, no_kern_samples=5, no_func_samples=10
     ):
-        batch_state = batch_state
-        batch_target = batch_target
         # propagate and compute the expected log likelihood
         self.forward_prep()
         f_means, f_vars, info = self.forward(

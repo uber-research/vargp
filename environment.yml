@@ -1,0 +1,14 @@
+name: cgp
+channels:
+  - conda-forge
+dependencies:
+  - python=3.7
+  - pip
+  - pip:
+    - ipykernel
+    - ipywidgets
+    - seaborn
+    - numpy
+    - tqdm
+    - fire
+    - torch

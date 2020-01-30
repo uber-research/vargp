@@ -36,7 +36,7 @@ class MulticlassSoftmax(nn.Module):
         # draw samples
         k, n, dout = fmean.shape
         eps = torch.randn([k, n, dout, no_samples])
-        fsamples = fmean.unsqueeze(-1) + fvar.unsqueeze(-1) * eps
+        fsamples = fmean.unsqueeze(-1) + fvar.unsqueeze(-1).sqrt() * eps
         logsoftmax = F.log_softmax(fsamples, dim=2).permute([1, 2, 3, 0])
         y = y.unsqueeze(-1).unsqueeze(-1).repeat([1, no_samples, k])
         loss = F.nll_loss(logsoftmax, y, reduction="none")
