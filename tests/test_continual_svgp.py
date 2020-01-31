@@ -151,8 +151,6 @@ class ContinualSVGP(nn.Module):
     super().__init__()
 
     self.M = z.size(-2)
-    self.in_size = z.size(-1)
-    self.out_size = z.size(0)
 
     self.kernel = kernel
     self.n_hypers = n_hypers
@@ -164,8 +162,9 @@ class ContinualSVGP(nn.Module):
     self.z = nn.Parameter(z.detach())
 
     # Variational parameters for q(u)
-    self.u_mean = nn.Parameter(torch.Tensor(self.out_size, self.M, 1).normal_(0., .5))
-    self.u_tril_vec = nn.Parameter(torch.ones(self.out_size, (self.M * (self.M + 1)) // 2))
+    out_size = z.size(0)
+    self.u_mean = nn.Parameter(torch.Tensor(out_size, self.M, 1).normal_(0., .5))
+    self.u_tril_vec = nn.Parameter(torch.ones(out_size, (self.M * (self.M + 1)) // 2))
 
     self.register_buffer('jitter', jitter * torch.eye(self.M))
 
@@ -236,7 +235,7 @@ class ContinualSVGP(nn.Module):
     return self.likelihood.predict(pred_mu, pred_var)
 
 
-def create_gp(in_size, out_size, M=20, n_f=10, n_hypers=3, max_val=3.):
+def create_class_gp(in_size, out_size, M=20, n_f=10, n_hypers=3, max_val=3.):
   z = (2. * torch.rand(out_size, M, in_size) - 1.) * max_val
   kernel = RBFKernel(in_size)
   likelihood = MulticlassSoftmax(n_f=n_f)
@@ -244,18 +243,11 @@ def create_gp(in_size, out_size, M=20, n_f=10, n_hypers=3, max_val=3.):
   return gp
 
 
-def main():
+def train_gp(x_train, y_train, n_classes):
   device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-  from data_utils import get_toy_cla_four
-  x_train, y_train, x_test, X1, X2 = get_toy_cla_four()
-
-  x_train = torch.from_numpy(x_train).float().to(device)
-  x_test = torch.from_numpy(x_test).float().to(device)
-  y_train_one_hot = torch.from_numpy(y_train).float().to(device)
-  y_train = y_train_one_hot.argmax(dim=-1)
-
-  gp = create_gp(x_train.size(-1), y_train_one_hot.size(-1)).to(device)
+  gp = create_class_gp(x_train.size(-1), n_classes,
+                       M=20, n_f=10, n_hypers=3).to(device)
   optim = torch.optim.Adam(gp.parameters(), lr=1e-2)
 
   for e in tqdm(range(5000)):
@@ -270,9 +262,16 @@ def main():
     if (e + 1) % 500 == 0:
       print(f'Loss: {loss.detach().item()}')
 
+  return gp.state_dict()
+
+
+def test_gp(gp_state_dict, x_train, y_train, x_test, X1, X2, n_classes):
+  x_test = torch.from_numpy(x_test).float().to(device)
+  
   with torch.no_grad():
-    test_gp = create_gp(x_train.size(-1), y_train_one_hot.size(-1), n_f=100, n_hypers=10).to(device)
-    test_gp.load_state_dict(gp.state_dict())
+    test_gp = create_class_gp(x_train.size(-1), n_classes,
+                              M=20, n_f=100, n_hypers=10).to(device)
+    test_gp.load_state_dict(gp_state_dict)
 
     y_pred = test_gp.predict(x_test)
 
@@ -281,9 +280,31 @@ def main():
         y_pred.cpu(),
         x_train.cpu(), y_train.cpu(),
         X1, X2,
-        gp.z.cpu().detach(), "four_batch_cgp"
+        test_gp.z.cpu().detach(), "four_batch_cgp"
     )
 
 
+def main():
+  from data_utils import get_toy_cla_four
+  x_train, y_train, *test_data = get_toy_cla_four()
+
+  x_train = torch.from_numpy(x_train).float().to(device)
+  y_train = torch.from_numpy(y_train).float().argmax(dim=-1).to(device)
+  n_classes = y_train.unique().size(0)
+
+  # Train GP on only classes 0,1
+  c01_idx = torch.masked_select(torch.arange(y_train.size(0)), (y_train == 0) | (y_train == 1))
+  c01_gp_state_dict = train_gp(x_train[c01_idx], y_train[c01_idx], n_classes)
+  test_gp(c01_gp_state_dict, x_train[c01_idx], y_train[c01_idx], *test_data, n_classes)
+
+  z1 = c01_gp_state_dict.get('z')
+
+  # Train GP on only classes 2,3
+  c23_idx = torch.masked_select(torch.arange(y_train.size(0)), (y_train == 2) | (y_train == 3))
+  c23_gp_state_dict = train_gp(x_train[c23_idx], y_train[c23_idx], n_classes)
+  test_gp(c23_gp_state_dict, x_train[c23_idx], y_train[c23_idx], *test_data, n_classes)
+
+
 if __name__ == "__main__":
+  device = 'cuda' if torch.cuda.is_available() else 'cpu'
   main()

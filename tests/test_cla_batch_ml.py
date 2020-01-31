@@ -60,7 +60,7 @@ def plot_prediction_four(pred_prob, x_train, y_train, X1, X2, zu, title):
         axs[k].set_ylim(np.min(X2), np.max(X2))
     # plt.title(title)
     plt.savefig(
-        "/tmp/" + "prediction_cla_" + title + ".pdf",
+        "/tmp/" + "prediction_cla_" + title + ".png",
         bbox_inches="tight",
         pad_inches=0,
     )
