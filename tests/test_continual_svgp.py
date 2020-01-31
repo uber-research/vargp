@@ -1,6 +1,3 @@
-'''
-NOTE(sanyam): Will gradually modularize this code.
-'''
 from tqdm.auto import tqdm
 import torch
 import torch.nn as nn
@@ -93,6 +90,56 @@ class MulticlassSoftmax(nn.Module):
 
     log_probs = y.logsumexp(dim=0) - torch.tensor(y.size(0)).float().log()
     return log_probs.exp().T
+
+
+class GaussianLikelihood(nn.Module):
+  '''
+  Independent multi-output Gaussian likelihood.
+  '''
+  def __init__(self, out_size, init_log_var=-4.):
+    super().__init__()
+
+    self.obs_log_var = nn.Parameter(init_log_var * torch.ones(out_size))
+
+  def forward(self, mu, var):
+    '''
+    Arguments:
+      mu: n_hypers x out_size x B
+      var: n_hypers x out_size x B
+
+    Returns:
+      observation mean and variance
+
+      obs_mu: n_hypers x out_size x B x 1
+      obs_var: n_hypers x out_size x B x 1
+    '''
+    obs_mu = mu.unsqueeze(-1)
+    obs_var = var.unsqueeze(-1) + self.obs_log_var.exp().unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+    return obs_mu, obs_var
+
+  def loss(self, pred_mu, pred_var, y):
+    '''
+    Arguments:
+      pred_mu: n_hypers x out_size x B
+      pred_var: n_hypers x out_size x B
+      y: out_size x B
+
+    Returns:
+      Total loss scalar value.
+    '''
+    obs_mean, obs_var = self(pred_mu, pred_var)
+
+    y_dist = dist.Independent(dist.Normal(obs_mean, obs_var.sqrt()), 1)
+    log_prob = y_dist.log_prob(y.unsqueeze(0).unsqueeze(-1))
+
+    nll = - log_prob.mean(dim=0).mean(dim=0).sum(dim=0)
+    return nll
+
+  def predict(self, mu, var):
+    '''
+    TODO(sanyam): just use the mean? minimizes Bayes risk?
+    '''
+    return mu
 
 
 class ContinualSVGP(nn.Module):
@@ -224,7 +271,10 @@ def main():
       print(f'Loss: {loss.detach().item()}')
 
   with torch.no_grad():
-    y_pred = gp.predict(x_test)
+    test_gp = create_gp(x_train.size(-1), y_train_one_hot.size(-1), n_f=100, n_hypers=10).to(device)
+    test_gp.load_state_dict(gp.state_dict())
+
+    y_pred = test_gp.predict(x_test)
 
     from test_cla_batch_ml import plot_prediction_four
     plot_prediction_four(
