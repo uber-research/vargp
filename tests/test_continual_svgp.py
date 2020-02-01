@@ -88,8 +88,8 @@ class MulticlassSoftmax(nn.Module):
 
     y = y_f.view(-1, *mu.shape[-2:])
 
-    log_probs = y.logsumexp(dim=0) - torch.tensor(y.size(0)).float().log()
-    return log_probs.exp().T
+    probs = y.logsumexp(dim=0).exp() / y.size(0)
+    return probs.T
 
 
 class GaussianLikelihood(nn.Module):
@@ -145,24 +145,23 @@ class GaussianLikelihood(nn.Module):
 class ContinualSVGP(nn.Module):
   '''
   Arguments:
-    z: Initial inducing points out_size x M x in_size
+    z_init: Initial inducing points out_size x M x in_size
+    z_old: List of old inducing points
   '''
-  def __init__(self, z, kernel, likelihood, n_hypers=1, jitter=1e-4):
+  def __init__(self, z_init, kernel, likelihood, n_hypers=1, jitter=1e-4, z_old=None):
     super().__init__()
 
-    self.M = z.size(-2)
+    self.M = z_init.size(-2)
 
     self.kernel = kernel
     self.n_hypers = n_hypers
     self.likelihood = likelihood
 
-    ## TODO(sanyam): Previous inducing points for continual learning
-
     # New inducing points
-    self.z = nn.Parameter(z.detach())
+    self.z = nn.Parameter(z_init.detach())
 
     # Variational parameters for q(u)
-    out_size = z.size(0)
+    out_size = self.z.size(0)
     self.u_mean = nn.Parameter(torch.Tensor(out_size, self.M, 1).normal_(0., .5))
     self.u_tril_vec = nn.Parameter(torch.ones(out_size, (self.M * (self.M + 1)) // 2))
 
@@ -170,9 +169,9 @@ class ContinualSVGP(nn.Module):
 
   def forward(self, x, info=False):
     '''
-    effectively the marginal p(f|X,α) of the joint p(f,u|X,α)
-    approximated by q(f,u|X,α) = p(f|X,u,α)q(u|α) 
-    for k samples of α.
+    effectively the marginal p(f|X,θ) of the joint p(f,u|X,θ)
+    approximated by q(f,u|X,θ) = p(f|X,u,θ)q(u|θ)
+    for k samples of θ.
     
     Arguments:
       x: B x in_size
@@ -204,7 +203,7 @@ class ContinualSVGP(nn.Module):
     pred_var = kff_diag - diag1 + diag2
 
     if info:
-      info = dict(hyper_samples=hyper_samples, u_tril=u_tril, Lkuu=Lkuu)
+      info = dict(u_tril=u_tril, Lkuu=Lkuu)
       return pred_mu, pred_var, info
 
     return pred_mu, pred_var
@@ -225,8 +224,7 @@ class ContinualSVGP(nn.Module):
 
     kl_u = kl_divergence(var_dist, prior_dist).sum(dim=-1).mean(dim=0)
 
-    ## TODO(sanyam): add non-standard hyperprior
-    kl_hypers = self.kernel.compute_kl()
+    kl_hypers = self.kernel.kl_hypers()
 
     return nll + kl_u + kl_hypers
 
@@ -235,9 +233,12 @@ class ContinualSVGP(nn.Module):
     return self.likelihood.predict(pred_mu, pred_var)
 
 
-def create_class_gp(in_size, out_size, M=20, n_f=10, n_hypers=3, max_val=3.):
-  z = (2. * torch.rand(out_size, M, in_size) - 1.) * max_val
-  kernel = RBFKernel(in_size)
+def create_class_gp(x_train, out_size, M=20, n_f=10, n_hypers=3):
+  z = torch.stack([
+    x_train[torch.randperm(x_train.size(0))[:M]]
+    for _ in range(out_size)])
+
+  kernel = RBFKernel(x_train.size(-1))
   likelihood = MulticlassSoftmax(n_f=n_f)
   gp = ContinualSVGP(z, kernel, likelihood, n_hypers=n_hypers)
   return gp
@@ -246,11 +247,11 @@ def create_class_gp(in_size, out_size, M=20, n_f=10, n_hypers=3, max_val=3.):
 def train_gp(x_train, y_train, n_classes):
   device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-  gp = create_class_gp(x_train.size(-1), n_classes,
+  gp = create_class_gp(x_train, n_classes,
                        M=20, n_f=10, n_hypers=3).to(device)
   optim = torch.optim.Adam(gp.parameters(), lr=1e-2)
 
-  for e in tqdm(range(5000)):
+  for e in tqdm(range(int(1e4))):
     optim.zero_grad()
 
     lik_loss = gp.loss(x_train, y_train)
@@ -269,7 +270,7 @@ def test_gp(gp_state_dict, x_train, y_train, x_test, X1, X2, n_classes):
   x_test = torch.from_numpy(x_test).float().to(device)
   
   with torch.no_grad():
-    test_gp = create_class_gp(x_train.size(-1), n_classes,
+    test_gp = create_class_gp(x_train, n_classes,
                               M=20, n_f=100, n_hypers=10).to(device)
     test_gp.load_state_dict(gp_state_dict)
 
