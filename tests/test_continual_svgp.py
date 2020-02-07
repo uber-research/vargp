@@ -74,8 +74,7 @@ class MulticlassSoftmax(nn.Module):
       Total loss scalar value.
     '''
     pred_y = self(pred_mu, pred_var).permute(3, 2, 0, 1)
-    target_y = y.unsqueeze(-1).unsqueeze(-1).expand(-1, *pred_y.shape[-2:])
-
+    target_y = y.view(-1, 1, 1).expand(-1, *pred_y.shape[-2:])
     lik_loss = F.nll_loss(pred_y, target_y,
                           reduction='none').mean(dim=-1).mean(dim=-1).sum(dim=0)
     return lik_loss
@@ -141,9 +140,6 @@ class GaussianLikelihood(nn.Module):
     return nll
 
   def predict(self, mu, var):
-    '''
-    TODO(sanyam): just use the mean? minimizes Bayes risk?
-    '''
     return mu
 
 
@@ -157,7 +153,7 @@ class ContinualSVGP(nn.Module):
                prev_params=None):
     super().__init__()
 
-    self.prev_params = self._process_params(prev_params)
+    self.prev_params = prev_params or []
     
     self.M = z_init.size(-2)
 
@@ -175,12 +171,6 @@ class ContinualSVGP(nn.Module):
 
     self.jitter = jitter
 
-  def _process_params(self, params):
-    def process(p):
-      p['u_tril'] = vec2tril(p.pop('u_tril_vec'))
-      return p
-    return [process(p) for p in (params or [])]
-
   def linear_gauss_joint(self, m_old, L_old, z_old, m_cur, L_cur, z_cur, theta):
     '''
     Utility function, linear Gaussian systems style,
@@ -191,7 +181,8 @@ class ContinualSVGP(nn.Module):
     cov = [S, SA^t; AS^T, C + ASA^T]
 
     Arguments:
-      m_old: out_size x M x 1
+      m_old, m_cur: [n_hypers x] out_size x M x 1
+      L_old, L_cur: [n_hypers x] out_size x M x M
       z_old: out_size x M x in_size
       z_cur: out_size x M x in_size
       theta: n_hypers x theta_size
@@ -201,20 +192,27 @@ class ContinualSVGP(nn.Module):
     '''
     n_hypers = theta.size(0)
 
+    if m_old.dim() == 3:
+      m_old = m_old.unsqueeze(0)
+
+    if L_old.dim() == 3:
+      L_old = L_old.unsqueeze(0)
+
+    if m_cur.dim() == 3:
+      m_cur = m_cur.unsqueeze(0)
+
+    if L_cur.dim() == 3:
+      L_cur = L_cur.unsqueeze(0)
+
     kuf = self.kernel.compute(theta, z_old, z_cur)
     kuu = self.kernel.compute(theta, z_old)
     Lkuu = torch.cholesky(kuu + self.jitter * torch.eye(kuu.size(-1), device=kuu.device), upper=False)
 
-    LKinvm, _ = torch.triangular_solve(m_old, Lkuu, upper=False)
     LKinvKuf, _ = torch.triangular_solve(kuf, Lkuu, upper=False)
+    LKinvm, _ = torch.triangular_solve(m_old, Lkuu, upper=False)
 
-    ## TODO(sanyam): unsqueeze only when dimension missing.
-    m_old = m_old.unsqueeze(0).expand(n_hypers, *([-1] * m_old.dim()))
-    m_new = torch.einsum('...ij,...ik->...jk', LKinvKuf, LKinvm) + m_cur.unsqueeze(0)
-    m_joint = torch.cat([m_old, m_new], dim=-2)
-
-    ## TODO(sanyam): unsqueeze only when dimension missing.
-    L_old = L_old.expand(n_hypers, *([-1] * L_old.dim()))
+    m_new = torch.einsum('...ij,...ik->...jk', LKinvKuf, LKinvm) + m_cur
+    m_joint = torch.cat([m_old.expand_as(m_new), m_new], dim=-2)
 
     ## Block 00
     S_old = torch.einsum('...ji,...ki->...jk', L_old, L_old)
@@ -222,13 +220,10 @@ class ContinualSVGP(nn.Module):
     ## Block 01
     LKinvLS, _ = torch.triangular_solve(L_old, Lkuu, upper=False)
     LKinvLS_LKinvKuf = torch.einsum('...ij,...ik->...jk', LKinvLS, LKinvKuf)
-    SoldAt = torch.einsum('...ji,...ik->...jk', L_old, LKinvLS_LKinvKuf)
+    SoldAt = torch.einsum('...ji,...ik->...jk', L_old.expand_as(LKinvLS_LKinvKuf), LKinvLS_LKinvKuf)
 
     ## Block 10
     ASoldt = torch.einsum('...ij->...ji', SoldAt)
-
-    ## TODO(sanyam): unsqueeze only when dimension missing.
-    L_cur = L_cur.expand(n_hypers, *([-1] * L_cur.dim()))
 
     ## Block 11
     S_cur = torch.einsum('...ji,...ki->...jk', L_cur, L_cur)
@@ -236,7 +231,7 @@ class ContinualSVGP(nn.Module):
 
     # Combine all blocks
     cov_joint = torch.cat([
-      torch.cat([S_old, SoldAt], dim=-1),
+      torch.cat([S_old.expand_as(SoldAt), SoldAt], dim=-1),
       torch.cat([ASoldt, S_cur + ASoldAt], dim=-1)
     ], dim=-2)
 
@@ -299,12 +294,19 @@ class ContinualSVGP(nn.Module):
       pred_mu: n_hypers x out_size x B
       pred_var: n_hypers x out_size x B
     '''
-    u_tril = vec2tril(self.u_tril_vec, self.M)
     theta = self.kernel.sample_hypers(self.n_hypers)
 
-    for params in self.prev_params:
-      self.linear_gauss_joint(params.get('u_mean'), params.get('u_tril'), params.get('z'),
-                              self.u_mean, u_tril, self.z, theta)
+    ## TODO(sanyam): Compute the distribution q(u_{< t}|θ), recursively use linear_gauss_joint
+
+    ## TODO(sanyam): Compute the distribution q(u_{<= t}, θ), to use in the predictive conditional below
+
+    ## TODO(sanyam): Compute the distribution q(u_{t} | u_{< t}, θ), to use in loss KL term
+
+    u_tril = vec2tril(self.u_tril_vec, self.M)
+
+    # for params in self.prev_params:
+    #   mu, cov = self.linear_gauss_joint(params.get('u_mean'), params.get('u_tril'), params.get('z'),
+    #                                     self.u_mean, u_tril, self.z, theta)
 
     pred_mu, pred_var, cache = self.linear_gauss_conditional(x, self.z, self.u_mean, u_tril, theta)
     cache = dict(u_tril=u_tril, **cache)
@@ -316,12 +318,11 @@ class ContinualSVGP(nn.Module):
     pred_mu, pred_var, cache = self(x)
     nll = self.likelihood.loss(pred_mu, pred_var, y)
 
-    ## TODO(sanyam): Add continual variational/prior distribution
-    var_mean = self.u_mean.squeeze(-1).unsqueeze(0).expand(self.n_hypers, -1, -1)
-    var_tril = cache.get('u_tril').unsqueeze(0).expand(self.n_hypers, -1, -1, -1)
+    var_mean = self.u_mean.squeeze(-1).unsqueeze(0)
+    var_tril = cache.get('u_tril').unsqueeze(0)
     var_dist = dist.MultivariateNormal(var_mean, scale_tril=var_tril)
 
-    prior_mean = torch.zeros_like(self.u_mean).squeeze(-1).unsqueeze(0).expand(self.n_hypers, -1, -1)
+    prior_mean = torch.zeros_like(self.u_mean).squeeze(-1).unsqueeze(0)
     prior_tril = cache.get('Lkuu')
     prior_dist = dist.MultivariateNormal(prior_mean, scale_tril=prior_tril)
 
@@ -336,12 +337,31 @@ class ContinualSVGP(nn.Module):
     return self.likelihood.predict(pred_mu, pred_var)
 
 
+def process_params(params):
+  if params is None:
+    return None
+
+  def process(p):
+    if 'u_tril_vec' in p:
+      p['u_tril'] = vec2tril(p.pop('u_tril_vec'))
+    return p
+
+  return [process(p) for p in params]
+
+
 def create_class_gp(x_train, out_size, M=20, n_f=10, n_hypers=3, prev_params=None):
+  prev_params = process_params(prev_params)
+
   z = torch.stack([
     x_train[torch.randperm(x_train.size(0))[:M]]
     for _ in range(out_size)])
 
-  kernel = RBFKernel(x_train.size(-1))
+  prior_log_mean, prior_log_logvar = None, None
+  if prev_params is not None:
+    prior_log_mean = prev_params[-1].get('kernel.log_mean')
+    prior_log_logvar = prev_params[-1].get('kernel.log_logvar')
+
+  kernel = RBFKernel(x_train.size(-1), prior_log_mean=prior_log_mean, prior_log_logvar=prior_log_logvar)
   likelihood = MulticlassSoftmax(n_f=n_f)
   gp = ContinualSVGP(z, kernel, likelihood, n_hypers=n_hypers,
                      prev_params=prev_params)

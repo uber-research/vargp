@@ -14,8 +14,10 @@ class RBFKernel(nn.Module):
         self.log_mean = nn.Parameter(log_init)
         self.log_logvar = nn.Parameter(-2 * torch.ones(in_size + 1))
 
-        self.register_buffer('prior_log_mean', prior_log_mean or torch.zeros_like(self.log_mean))
-        self.register_buffer('prior_log_logvar', prior_log_logvar or torch.zeros_like(self.log_logvar))
+        self.register_buffer('prior_log_mean', prior_log_mean if prior_log_mean is not None \
+                                               else torch.zeros_like(self.log_mean))
+        self.register_buffer('prior_log_logvar', prior_log_logvar if prior_log_logvar is not None \
+                                                 else torch.zeros_like(self.log_logvar))
 
     def compute(self, kern_samples, x, y=None):
         '''
