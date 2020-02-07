@@ -8,17 +8,22 @@ from torch.distributions.kl import kl_divergence
 from models.hypers_vi.kernels import RBFKernel
 
 
-def vec2tril(vec, m):
+def vec2tril(vec, m=None):
   '''
   Arguments:
     vec: K x ((m * (m + 1)) // 2)
-    m: integer
+    m: integer, if None, inferred from last dimension.
 
   Returns:
     Batch of lower triangular matrices
 
     tril: K x m x m
   '''
+  if m is None:
+    D = vec.size(-1)
+    m = (torch.tensor(8. * D + 1).sqrt() - 1.) / 2.
+    m = m.long().item()
+
   batch_shape = vec.shape[:-1]
 
   idx = torch.tril_indices(m, m)
@@ -146,11 +151,14 @@ class ContinualSVGP(nn.Module):
   '''
   Arguments:
     z_init: Initial inducing points out_size x M x in_size
-    z_old: List of old inducing points
+    prev_params: List of old inducing points
   '''
-  def __init__(self, z_init, kernel, likelihood, n_hypers=1, jitter=1e-4, z_old=None):
+  def __init__(self, z_init, kernel, likelihood, n_hypers=1, jitter=1e-4,
+               prev_params=None):
     super().__init__()
 
+    self.prev_params = self._process_params(prev_params)
+    
     self.M = z_init.size(-2)
 
     self.kernel = kernel
@@ -166,6 +174,75 @@ class ContinualSVGP(nn.Module):
     self.u_tril_vec = nn.Parameter(torch.ones(out_size, (self.M * (self.M + 1)) // 2))
 
     self.jitter = jitter
+
+  def _process_params(self, params):
+    def process(p):
+      p['u_tril'] = vec2tril(p.pop('u_tril_vec'))
+      return p
+    return [process(p) for p in (params or [])]
+
+  def linear_gauss_joint(self, m_old, L_old, z_old, m_cur, L_cur, z_cur, theta):
+    '''
+    Utility function, linear Gaussian systems style,
+    gets the full joint p(x,y) = N(x, m, S)N(y; Ax+b, C)
+    
+    In our setting this is given by
+    mu = [m; Am + b]
+    cov = [S, SA^t; AS^T, C + ASA^T]
+
+    Arguments:
+      m_old: out_size x M x 1
+      z_old: out_size x M x in_size
+      z_cur: out_size x M x in_size
+      theta: n_hypers x theta_size
+
+    Returns:
+      m_joint: n_hypers x out_size x (M + M) x 1
+    '''
+    n_hypers = theta.size(0)
+
+    kuf = self.kernel.compute(theta, z_old, z_cur)
+    kuu = self.kernel.compute(theta, z_old)
+    Lkuu = torch.cholesky(kuu + self.jitter * torch.eye(kuu.size(-1), device=kuu.device), upper=False)
+
+    LKinvm, _ = torch.triangular_solve(m_old, Lkuu, upper=False)
+    LKinvKuf, _ = torch.triangular_solve(kuf, Lkuu, upper=False)
+
+    ## TODO(sanyam): unsqueeze only when dimension missing.
+    m_old = m_old.unsqueeze(0).expand(n_hypers, *([-1] * m_old.dim()))
+    m_new = torch.einsum('...ij,...ik->...jk', LKinvKuf, LKinvm) + m_cur.unsqueeze(0)
+    m_joint = torch.cat([m_old, m_new], dim=-2)
+
+    ## TODO(sanyam): unsqueeze only when dimension missing.
+    L_old = L_old.expand(n_hypers, *([-1] * L_old.dim()))
+
+    ## Block 00
+    S_old = torch.einsum('...ji,...ki->...jk', L_old, L_old)
+
+    ## Block 01
+    LKinvLS, _ = torch.triangular_solve(L_old, Lkuu, upper=False)
+    LKinvLS_LKinvKuf = torch.einsum('...ij,...ik->...jk', LKinvLS, LKinvKuf)
+    SoldAt = torch.einsum('...ji,...ik->...jk', L_old, LKinvLS_LKinvKuf)
+
+    ## Block 10
+    ASoldt = torch.einsum('...ij->...ji', SoldAt)
+
+    ## TODO(sanyam): unsqueeze only when dimension missing.
+    L_cur = L_cur.expand(n_hypers, *([-1] * L_cur.dim()))
+
+    ## Block 11
+    S_cur = torch.einsum('...ji,...ki->...jk', L_cur, L_cur)
+    ASoldAt = torch.einsum('...ij,...ik->...jk', LKinvLS_LKinvKuf, LKinvLS_LKinvKuf)
+
+    # Combine all blocks
+    cov_joint = torch.cat([
+      torch.cat([S_old, SoldAt], dim=-1),
+      torch.cat([ASoldt, S_cur + ASoldAt], dim=-1)
+    ], dim=-2)
+
+    L_cov_joint = torch.cholesky(cov_joint + self.jitter * torch.eye(cov_joint.size(-1), device=cov_joint.device), upper=False)
+
+    return m_joint, L_cov_joint
 
   def linear_gauss_conditional(self, x, z, u_mean, u_tril, theta):
     '''
@@ -191,14 +268,13 @@ class ContinualSVGP(nn.Module):
       mu: out means, n_hypers x out_size x B
       var: out variances, n_hypers x out_size x B
     '''
-    kfu = self.kernel.compute_kfu(x, z, theta)
-    kuf = kfu.permute(0, 1, 3, 2)
-    kuu = self.kernel.compute_kuu(z, theta)
+    kuf = self.kernel.compute(theta, z, x.unsqueeze(0).expand(z.size(0), -1, -1))
+    kuu = self.kernel.compute(theta, z)
     Lkuu = torch.cholesky(kuu + self.jitter * torch.eye(kuu.size(-1), device=kuu.device), upper=False)
     LKinvu, _ = torch.triangular_solve(u_mean, Lkuu, upper=False)
     LKinvKuf, _ = torch.triangular_solve(kuf, Lkuu, upper=False)
 
-    kff_diag = self.kernel.compute_kff_diag(theta)
+    kff_diag = self.kernel.compute_diag(theta)
     diag1 = (LKinvKuf**2).sum(dim=-2)
     LKinvLs, _ = torch.triangular_solve(u_tril, Lkuu)
     vec2 = torch.einsum('...ij,...ik->...jk', LKinvLs, LKinvKuf)
@@ -226,9 +302,13 @@ class ContinualSVGP(nn.Module):
     u_tril = vec2tril(self.u_tril_vec, self.M)
     theta = self.kernel.sample_hypers(self.n_hypers)
 
+    for params in self.prev_params:
+      self.linear_gauss_joint(params.get('u_mean'), params.get('u_tril'), params.get('z'),
+                              self.u_mean, u_tril, self.z, theta)
+
     pred_mu, pred_var, cache = self.linear_gauss_conditional(x, self.z, self.u_mean, u_tril, theta)
-    cache = {'u_tril': u_tril, **cache}
-    
+    cache = dict(u_tril=u_tril, **cache)
+
     return pred_mu, pred_var, cache
 
   def loss(self, x, y):
@@ -256,25 +336,27 @@ class ContinualSVGP(nn.Module):
     return self.likelihood.predict(pred_mu, pred_var)
 
 
-def create_class_gp(x_train, out_size, M=20, n_f=10, n_hypers=3):
+def create_class_gp(x_train, out_size, M=20, n_f=10, n_hypers=3, prev_params=None):
   z = torch.stack([
     x_train[torch.randperm(x_train.size(0))[:M]]
     for _ in range(out_size)])
 
   kernel = RBFKernel(x_train.size(-1))
   likelihood = MulticlassSoftmax(n_f=n_f)
-  gp = ContinualSVGP(z, kernel, likelihood, n_hypers=n_hypers)
+  gp = ContinualSVGP(z, kernel, likelihood, n_hypers=n_hypers,
+                     prev_params=prev_params)
   return gp
 
 
-def train_gp(x_train, y_train, n_classes):
+def train_gp(x_train, y_train, n_classes, epochs=int(1e4), prev_params=None):
   device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
   gp = create_class_gp(x_train, n_classes,
-                       M=20, n_f=10, n_hypers=3).to(device)
+                       M=20, n_f=10, n_hypers=3,
+                       prev_params=prev_params).to(device)
   optim = torch.optim.Adam(gp.parameters(), lr=1e-2)
 
-  for e in tqdm(range(int(1e4))):
+  for e in tqdm(range(epochs)):
     optim.zero_grad()
 
     lik_loss = gp.loss(x_train, y_train)
@@ -289,12 +371,13 @@ def train_gp(x_train, y_train, n_classes):
   return gp.state_dict()
 
 
-def test_gp(gp_state_dict, x_train, y_train, x_test, X1, X2, n_classes):
+def test_gp(gp_state_dict, x_train, y_train, x_test, X1, X2, n_classes, prev_params=None):
   x_test = torch.from_numpy(x_test).float().to(device)
   
   with torch.no_grad():
     test_gp = create_class_gp(x_train, n_classes,
-                              M=20, n_f=100, n_hypers=10).to(device)
+                              M=20, n_f=100, n_hypers=10,
+                              prev_params=prev_params).to(device)
     test_gp.load_state_dict(gp_state_dict)
 
     y_pred = test_gp.predict(x_test)
@@ -316,17 +399,19 @@ def main():
   y_train = torch.from_numpy(y_train).float().argmax(dim=-1).to(device)
   n_classes = y_train.unique().size(0)
 
+  prev_params = []
+
   # Train GP on only classes 0,1
   c01_idx = torch.masked_select(torch.arange(y_train.size(0)).to(device), (y_train == 0) | (y_train == 1))
-  c01_gp_state_dict = train_gp(x_train[c01_idx], y_train[c01_idx], n_classes)
+  c01_gp_state_dict = train_gp(x_train[c01_idx], y_train[c01_idx], n_classes, epochs=100)
   test_gp(c01_gp_state_dict, x_train[c01_idx], y_train[c01_idx], *test_data, n_classes)
 
-  z1 = c01_gp_state_dict.get('z')
+  prev_params.append(c01_gp_state_dict)
 
   # Train GP on only classes 2,3
   c23_idx = torch.masked_select(torch.arange(y_train.size(0)).to(device), (y_train == 2) | (y_train == 3))
-  c23_gp_state_dict = train_gp(x_train[c23_idx], y_train[c23_idx], n_classes)
-  test_gp(c23_gp_state_dict, x_train[c23_idx], y_train[c23_idx], *test_data, n_classes)
+  c23_gp_state_dict = train_gp(x_train[c23_idx], y_train[c23_idx], n_classes, prev_params=prev_params)
+  test_gp(c23_gp_state_dict, x_train[c23_idx], y_train[c23_idx], *test_data, n_classes, prev_params=prev_params)
 
 
 if __name__ == "__main__":
