@@ -5,7 +5,70 @@ import torch.nn.functional as F
 import torch.distributions as dist
 from torch.distributions.kl import kl_divergence
 
-from models.hypers_vi.kernels import RBFKernel
+
+class RBFKernel(nn.Module):
+    def __init__(self, in_size, prior_log_mean=None, prior_log_logvar=None):
+        super().__init__()
+
+        # Variational Parameters (log lengthscale and log scale factor) 
+        log_init = torch.tensor(.5).log() * torch.ones(in_size + 1) \
+                   + .05 * torch.randn(in_size + 1)
+        self.log_mean = nn.Parameter(log_init)
+        self.log_logvar = nn.Parameter(-2 * torch.ones(in_size + 1))
+
+        self.register_buffer('prior_log_mean', prior_log_mean if prior_log_mean is not None \
+                                               else torch.zeros_like(self.log_mean))
+        self.register_buffer('prior_log_logvar', prior_log_logvar if prior_log_logvar is not None \
+                                                 else torch.zeros_like(self.log_logvar))
+
+    def compute(self, kern_samples, x, y=None):
+        '''
+        Generic batch kernel evaluation. Send
+        y = None for efficient re-use of computations
+        in case x = y.
+
+        Arguments:
+            kern_samples: n_hypers x 3
+            x: ...batches x M x D
+            y: ...batches x N x D, if None, assumed equals x
+
+        Returns:
+            n_hypers x ...batches x M x N
+        '''
+        n_hypers = kern_samples.size(0)
+        kern_samples = kern_samples.view(n_hypers, 1, *([1] * len(x.shape[:-2])), -1)
+
+        sigma = kern_samples[..., :-1].exp()
+        gamma2 = (kern_samples[..., -1:] * 2.).exp()
+
+        sx = x.unsqueeze(0) / sigma
+        xx = torch.einsum('...ji,...ki->...jk', sx, sx)
+
+        if y is None:
+            yy = xy = xx
+        else:
+            sy = y.unsqueeze(0) / sigma
+            yy = torch.einsum('...ji,...ki->...jk', sy, sy)
+            xy = torch.einsum('...ji,...ki->...jk', sx, sy)
+
+        dnorm2 = - 2. * xy + xx.diagonal(dim1=-2, dim2=-1).unsqueeze(-1) + yy.diagonal(dim1=-2, dim2=-1).unsqueeze(-2)
+
+        return gamma2 * (-.5 * dnorm2).exp()
+
+    def compute_diag(self, kern_samples):
+        gamma2 = (kern_samples[..., -1:] * 2.).exp().unsqueeze(-2)
+        return gamma2
+
+    def sample_hypers(self, n_hypers):
+        log_dist = dist.Normal(self.log_mean, self.log_logvar.exp().sqrt())
+        log_hypers = log_dist.rsample(torch.Size([n_hypers]))
+        return log_hypers
+
+    def kl_hypers(self):
+        var_dist = dist.Normal(self.log_mean, self.log_logvar.exp().sqrt())
+        prior_dist = dist.Normal(self.prior_log_mean, self.prior_log_logvar.exp().sqrt())
+        total_kl = kl_divergence(var_dist, prior_dist).sum(dim=0)
+        return total_kl
 
 
 def vec2tril(vec, m=None):
@@ -237,7 +300,9 @@ class ContinualSVGP(nn.Module):
 
     L_cov_joint = torch.cholesky(cov_joint + self.jitter * torch.eye(cov_joint.size(-1), device=cov_joint.device), upper=False)
 
-    return m_joint, L_cov_joint
+    z_joint = torch.cat([z_old, z_cur], dim=-2)
+
+    return m_joint, L_cov_joint, z_joint
 
   def linear_gauss_conditional(self, x, z, u_mean, u_tril, theta):
     '''
@@ -296,20 +361,25 @@ class ContinualSVGP(nn.Module):
     '''
     theta = self.kernel.sample_hypers(self.n_hypers)
 
-    ## TODO(sanyam): Compute the distribution q(u_{< t}|θ), recursively use linear_gauss_joint
+    if self.prev_params:
+      # Statistics for q(u_{< t} | θ)
+      mu_lt = self.prev_params[0].get('u_mean')
+      L_cov_lt = self.prev_params[0].get('u_tril')
+      z_lt = self.prev_params[0].get('z')
+      for t, params in enumerate(self.prev_params[1:]):
+        mu_lt, L_cov_lt, z_lt = self.linear_gauss_joint(mu_lt, L_cov_lt, z_lt,
+                                                        params.get('u_mean'), params.get('u_tril'), params.get('z'),
+                                                        theta)
 
-    ## TODO(sanyam): Compute the distribution q(u_{<= t}, θ), to use in the predictive conditional below
+      # Statistics for q(u_{<= t} | θ)
+      mu_leq_t, L_cov_leq_t, z_leq_t = self.linear_gauss_joint(mu_lt, L_cov_lt, z_lt,
+                                                               self.u_mean, vec2tril(self.u_tril_vec, self.M), self.z,
+                                                               theta)
+    else:
+      mu_leq_t, L_cov_leq_t, z_leq_t = self.u_mean, vec2tril(self.u_tril_vec, self.M), self.z
 
-    ## TODO(sanyam): Compute the distribution q(u_{t} | u_{< t}, θ), to use in loss KL term
-
-    u_tril = vec2tril(self.u_tril_vec, self.M)
-
-    # for params in self.prev_params:
-    #   mu, cov = self.linear_gauss_joint(params.get('u_mean'), params.get('u_tril'), params.get('z'),
-    #                                     self.u_mean, u_tril, self.z, theta)
-
-    pred_mu, pred_var, cache = self.linear_gauss_conditional(x, self.z, self.u_mean, u_tril, theta)
-    cache = dict(u_tril=u_tril, **cache)
+    pred_mu, pred_var, cache = self.linear_gauss_conditional(x, z_leq_t, mu_leq_t, L_cov_leq_t, theta)
+    cache = dict(u_tril=L_cov_leq_t, **cache)
 
     return pred_mu, pred_var, cache
 
@@ -318,6 +388,7 @@ class ContinualSVGP(nn.Module):
     pred_mu, pred_var, cache = self(x)
     nll = self.likelihood.loss(pred_mu, pred_var, y)
 
+    ## TODO(sanyam): Fix these terms to account for prev_params
     var_mean = self.u_mean.squeeze(-1).unsqueeze(0)
     var_tril = cache.get('u_tril').unsqueeze(0)
     var_dist = dist.MultivariateNormal(var_mean, scale_tril=var_tril)
@@ -423,7 +494,7 @@ def main():
 
   # Train GP on only classes 0,1
   c01_idx = torch.masked_select(torch.arange(y_train.size(0)).to(device), (y_train == 0) | (y_train == 1))
-  c01_gp_state_dict = train_gp(x_train[c01_idx], y_train[c01_idx], n_classes, epochs=100)
+  c01_gp_state_dict = train_gp(x_train[c01_idx], y_train[c01_idx], n_classes)
   test_gp(c01_gp_state_dict, x_train[c01_idx], y_train[c01_idx], *test_data, n_classes)
 
   prev_params.append(c01_gp_state_dict)
