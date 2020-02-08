@@ -10,7 +10,7 @@ class RBFKernel(nn.Module):
     def __init__(self, in_size, prior_log_mean=None, prior_log_logvar=None):
         super().__init__()
 
-        # Variational Parameters (log lengthscale and log scale factor) 
+        # Variational Parameters (log lengthscale and log scale factor)
         log_init = torch.tensor(.5).log() * torch.ones(in_size + 1) \
                    + .05 * torch.randn(in_size + 1)
         self.log_mean = nn.Parameter(log_init)
@@ -217,7 +217,7 @@ class ContinualSVGP(nn.Module):
     super().__init__()
 
     self.prev_params = prev_params or []
-    
+
     self.M = z_init.size(-2)
 
     self.kernel = kernel
@@ -238,7 +238,7 @@ class ContinualSVGP(nn.Module):
     '''
     Utility function, linear Gaussian systems style,
     gets the full joint p(x,y) = N(x, m, S)N(y; Ax+b, C)
-    
+
     In our setting this is given by
     mu = [m; Am + b]
     cov = [S, SA^t; AS^T, C + ASA^T]
@@ -246,12 +246,13 @@ class ContinualSVGP(nn.Module):
     Arguments:
       m_old, m_cur: [n_hypers x] out_size x M x 1
       L_old, L_cur: [n_hypers x] out_size x M x M
-      z_old: out_size x M x in_size
-      z_cur: out_size x M x in_size
+      z_old, z_cur: out_size x M x in_size
       theta: n_hypers x theta_size
 
     Returns:
       m_joint: n_hypers x out_size x (M + M) x 1
+      L_cov_joint: n_hypers x out_size x (M + M) x (M + M)
+      z_joint: out_size x (M + M) x in_size
     '''
     n_hypers = theta.size(0)
 
@@ -273,8 +274,9 @@ class ContinualSVGP(nn.Module):
 
     LKinvKuf, _ = torch.triangular_solve(kuf, Lkuu, upper=False)
     LKinvm, _ = torch.triangular_solve(m_old, Lkuu, upper=False)
+    LKinvKuf_LKinvm = torch.einsum('...ij,...ik->...jk', LKinvKuf, LKinvm)
 
-    m_new = torch.einsum('...ij,...ik->...jk', LKinvKuf, LKinvm) + m_cur
+    m_new = LKinvKuf_LKinvm + m_cur
     m_joint = torch.cat([m_old.expand_as(m_new), m_new], dim=-2)
 
     ## Block 00
@@ -302,9 +304,15 @@ class ContinualSVGP(nn.Module):
 
     z_joint = torch.cat([z_old, z_cur], dim=-2)
 
-    return m_joint, L_cov_joint, z_joint
+    # only for the conditional
+    prior_cov = self.kernel.compute(theta, z_cur, z_cur) - torch.einsum('...ij,...ik->...jk', LKinvKuf, LKinvKuf)
+    L_prior_cov = torch.cholesky(prior_cov + self.jitter * torch.eye(prior_cov.size(-1), device=prior_cov.device), upper=False)
 
-  def linear_gauss_conditional(self, x, z, u_mean, u_tril, theta):
+    cache = dict(LKinvKuf_LKinvm=LKinvKuf_LKinvm, L_prior_cov=L_prior_cov)
+
+    return m_joint, L_cov_joint, z_joint, cache
+
+  def linear_gauss_conditional_diag(self, x, z, u_mean, u_tril, theta):
     '''
     Utility function, linear Gaussian systems style,
     gets the marginal p(f|x,θ) of the joint
@@ -355,7 +363,7 @@ class ContinualSVGP(nn.Module):
     Returns:
       Output distributions for n_hypers samples of hyperparameters.
       The output contains only diagonal of the full covariance.
- 
+
       pred_mu: n_hypers x out_size x B
       pred_var: n_hypers x out_size x B
     '''
@@ -367,35 +375,55 @@ class ContinualSVGP(nn.Module):
       L_cov_lt = self.prev_params[0].get('u_tril')
       z_lt = self.prev_params[0].get('z')
       for t, params in enumerate(self.prev_params[1:]):
-        mu_lt, L_cov_lt, z_lt = self.linear_gauss_joint(mu_lt, L_cov_lt, z_lt,
-                                                        params.get('u_mean'), params.get('u_tril'), params.get('z'),
-                                                        theta)
+        mu_lt, L_cov_lt, z_lt, _ = self.linear_gauss_joint(mu_lt, L_cov_lt, z_lt,
+                                                           params.get('u_mean'),
+                                                           params.get('u_tril'), params.get('z'),
+                                                           theta)
 
       # Statistics for q(u_{<= t} | θ)
-      mu_leq_t, L_cov_leq_t, z_leq_t = self.linear_gauss_joint(mu_lt, L_cov_lt, z_lt,
-                                                               self.u_mean, vec2tril(self.u_tril_vec, self.M), self.z,
-                                                               theta)
+      u_tril = vec2tril(self.u_tril_vec, self.M)
+      mu_leq_t, L_cov_leq_t, z_leq_t, cache_leq_t = self.linear_gauss_joint(mu_lt, L_cov_lt, z_lt,
+                                                                            self.u_mean, u_tril, self.z,
+                                                                            theta)
+
+      # Statistics for q(u_t | u_{< t}, θ)
+      mu_t = (cache_leq_t.get('LKinvKuf_LKinvm') + self.u_mean.unsqueeze(0)).squeeze(-1)
+      L_cov_t = u_tril.unsqueeze(0)
+
+      # Statistics for p(u_t| u_{< t}, θ)
+      prior_mu_t = cache_leq_t.get('LKinvKuf_LKinvm').squeeze(-1)
+      prior_L_cov_t = cache_leq_t.get('L_prior_cov')
+
+      pred_mu, pred_var, _ = self.linear_gauss_conditional_diag(x, z_leq_t, mu_leq_t, L_cov_leq_t, theta)
     else:
+      # Statistics for q(u_{<= 1} | θ) = q(u_1)
       mu_leq_t, L_cov_leq_t, z_leq_t = self.u_mean, vec2tril(self.u_tril_vec, self.M), self.z
 
-    pred_mu, pred_var, cache = self.linear_gauss_conditional(x, z_leq_t, mu_leq_t, L_cov_leq_t, theta)
-    cache = dict(u_tril=L_cov_leq_t, **cache)
+      # Statistics for q(u_1 | u_{< 1}, θ) = q(u_1)
+      mu_t = mu_leq_t.squeeze(-1).unsqueeze(0)
+      L_cov_t = L_cov_leq_t.unsqueeze(0)
 
-    return pred_mu, pred_var, cache
+      pred_mu, pred_var, pred_cache = self.linear_gauss_conditional_diag(x, z_leq_t, mu_leq_t, L_cov_leq_t, theta)
+
+      # Statistics for p(u_1 | u_{< 1}, θ) = p(u_1)
+      prior_mu_t = torch.zeros_like(mu_t)
+      prior_L_cov_t = pred_cache.get('Lkuu')
+
+    loss_cache = dict(var_mu_t=mu_t, var_L_cov_t=L_cov_t, prior_mu_t=prior_mu_t, prior_L_cov_t=prior_L_cov_t)
+
+    return pred_mu, pred_var, loss_cache
 
   def loss(self, x, y):
-    ## Expected Negative Log Likelihood
-    pred_mu, pred_var, cache = self(x)
+    pred_mu, pred_var, loss_cache = self(x)
     nll = self.likelihood.loss(pred_mu, pred_var, y)
 
-    ## TODO(sanyam): Fix these terms to account for prev_params
-    var_mean = self.u_mean.squeeze(-1).unsqueeze(0)
-    var_tril = cache.get('u_tril').unsqueeze(0)
-    var_dist = dist.MultivariateNormal(var_mean, scale_tril=var_tril)
+    var_dist = dist.MultivariateNormal(
+      loss_cache.get('var_mu_t'),
+      scale_tril=loss_cache.get('var_L_cov_t'))
 
-    prior_mean = torch.zeros_like(self.u_mean).squeeze(-1).unsqueeze(0)
-    prior_tril = cache.get('Lkuu')
-    prior_dist = dist.MultivariateNormal(prior_mean, scale_tril=prior_tril)
+    prior_dist = dist.MultivariateNormal(
+      loss_cache.get('prior_mu_t'),
+      scale_tril=loss_cache.get('prior_L_cov_t'))
 
     kl_u = kl_divergence(var_dist, prior_dist).sum(dim=-1).mean(dim=0)
 
@@ -464,7 +492,7 @@ def train_gp(x_train, y_train, n_classes, epochs=int(1e4), prev_params=None):
 
 def test_gp(gp_state_dict, x_train, y_train, x_test, X1, X2, n_classes, prev_params=None):
   x_test = torch.from_numpy(x_test).float().to(device)
-  
+
   with torch.no_grad():
     test_gp = create_class_gp(x_train, n_classes,
                               M=20, n_f=100, n_hypers=10,
