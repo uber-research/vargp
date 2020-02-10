@@ -344,7 +344,7 @@ class ContinualSVGP(nn.Module):
 
     kff_diag = self.kernel.compute_diag(theta)
     diag1 = (LKinvKuf**2).sum(dim=-2)
-    LKinvLs, _ = torch.triangular_solve(u_tril, Lkuu)
+    LKinvLs, _ = torch.triangular_solve(u_tril, Lkuu, upper=False)
     vec2 = torch.einsum('...ij,...ik->...jk', LKinvLs, LKinvKuf)
     diag2 = (vec2**2).sum(dim=-2)
 
