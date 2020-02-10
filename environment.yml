@@ -12,3 +12,4 @@ dependencies:
     - tqdm
     - fire
     - torch
+    - torchvision
