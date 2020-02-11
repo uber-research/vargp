@@ -60,11 +60,12 @@ def train_gp(dataset, task_id=-1, epochs=int(1e4), batch_size=512, prev_params=N
         count = 0
         for x, y in tqdm(loader, leave=False):
           preds = gp.predict(x.to(device))
+          # print(torch.distributions.Categorical(preds).entropy().mean(dim=0))
           count += (preds.argmax(dim=-1) == y.to(device)).sum().item()
 
         acc = count / len(dataset)
 
-      print(f'Epoch {e + 1} Loss: {loss.detach().item()}, Accuracy: {acc:.4f}')
+      print(f'Epoch {e + 1} Loss: {loss.detach().item():.4f}, Accuracy: {acc:.4f}')
 
   return gp.state_dict()
 
