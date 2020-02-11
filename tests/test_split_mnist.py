@@ -1,6 +1,7 @@
 from tqdm.auto import tqdm
 import torch
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 from continual_gp.kernels import RBFKernel
 from continual_gp.likelihoods import MulticlassSoftmax
@@ -32,7 +33,7 @@ def create_class_gp(dataset, M=20, n_f=10, n_hypers=3, prev_params=None):
   return gp
 
 
-def train_gp(dataset, task_id=-1, epochs=int(1e4), batch_size=512, prev_params=None):
+def train_gp(dataset, task_id=-1, epochs=int(1e4), batch_size=512, prev_params=None, logger=None):
   device = 'cuda' if torch.cuda.is_available() else 'cpu'
   
   dataset.set_task(task_id)
@@ -65,17 +66,25 @@ def train_gp(dataset, task_id=-1, epochs=int(1e4), batch_size=512, prev_params=N
 
         acc = count / len(dataset)
 
-      print(f'Epoch {e + 1} Loss: {loss.detach().item():.4f}, Accuracy: {acc:.4f}')
+      if logger is not None:
+        logger.add_scalar('loss/kl_hypers', kl_hypers, global_step=e + 1)
+        logger.add_scalar('loss/kl_u', kl_u, global_step=e + 1)
+        logger.add_scalar('loss/lik', lik, global_step=e + 1)
+        
+        logger.add_scalar('train/acc', acc, global_step=e + 1)
 
   return gp.state_dict()
 
 
-def main():
-  train_dataset = SplitMNIST('/tmp/mnist', train=True)
+def main(data_dir='/tmp', task_id=-1, log_dir=None):
+  logger = SummaryWriter(log_dir=log_dir) if log_dir is not None else None
 
-  train_gp(train_dataset, task_id=-1)
+  train_dataset = SplitMNIST(f'{data_dir}/mnist_train', train=True)
 
+  train_gp(train_dataset, task_id=task_id,
+           logger=logger)
 
 
 if __name__ == "__main__":
-  main()
+  import fire
+  fire.Fire(main)

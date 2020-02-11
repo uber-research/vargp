@@ -13,3 +13,4 @@ dependencies:
     - fire
     - torch
     - torchvision
+    - tensorboard
