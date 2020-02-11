@@ -36,9 +36,9 @@ def train_gp(x_train, y_train, n_classes, epochs=int(1e4), prev_params=None):
   for e in tqdm(range(epochs)):
     optim.zero_grad()
 
-    lik_loss = gp.loss(x_train, y_train)
+    kl_hypers, kl_u, lik = gp.loss(x_train, y_train)
 
-    loss = lik_loss
+    loss = kl_hypers + kl_u + lik
     loss.backward()
     optim.step()
 

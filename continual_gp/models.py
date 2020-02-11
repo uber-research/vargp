@@ -229,7 +229,7 @@ class ContinualSVGP(nn.Module):
 
     kl_hypers = self.kernel.kl_hypers()
 
-    return nll + kl_u + kl_hypers
+    return kl_hypers, kl_u, nll
 
   def predict(self, x):
     pred_mu, pred_var, _ = self(x)
