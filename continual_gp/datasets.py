@@ -26,6 +26,11 @@ class SplitMNIST(MNIST):
     self.task_ids = torch.masked_select(torch.arange(self.targets.size(0)),
                                        (self.targets == 2 * i) | (self.targets == 2 * i + 1))
 
+    ## Only keep desired data and remap 2i -> 0/ 2i + 1 -> 1
+    # self.data = self.data[self.task_ids]
+    # self.targets = self.targets[self.task_ids] % 2
+    # self.task_ids = torch.arange(self.targets.size(0))
+
   def __getitem__(self, index):
     """
     Args:

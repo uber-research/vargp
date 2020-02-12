@@ -33,11 +33,9 @@ def create_class_gp(dataset, M=20, n_f=10, n_hypers=3, prev_params=None):
   return gp
 
 
-def train_gp(dataset, task_id=-1, epochs=int(1e4), batch_size=512, prev_params=None, logger=None):
+def train_gp(dataset, epochs=1, batch_size=512, prev_params=None, logger=None):
   device = 'cuda' if torch.cuda.is_available() else 'cpu'
   
-  dataset.set_task(task_id)
-
   gp = create_class_gp(dataset, M=200, n_f=10, n_hypers=3,
                        prev_params=prev_params).to(device)
   optim = torch.optim.Adam(gp.parameters(), lr=1e-2)
@@ -76,13 +74,13 @@ def train_gp(dataset, task_id=-1, epochs=int(1e4), batch_size=512, prev_params=N
   return gp.state_dict()
 
 
-def main(data_dir='/tmp', task_id=-1, log_dir=None):
+def main(data_dir='/tmp', task_id=-1, epochs=2000, log_dir=None):
   logger = SummaryWriter(log_dir=log_dir) if log_dir is not None else None
 
   train_dataset = SplitMNIST(f'{data_dir}/mnist_train', train=True)
+  train_dataset.set_task(task_id)
 
-  train_gp(train_dataset, task_id=task_id,
-           logger=logger)
+  state_dict = train_gp(train_dataset, epochs=epochs, logger=logger)
 
 
 if __name__ == "__main__":
