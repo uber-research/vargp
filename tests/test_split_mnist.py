@@ -38,6 +38,12 @@ def train_gp(dataset, epochs=1, batch_size=512, prev_params=None, logger=None):
   
   gp = create_class_gp(dataset, M=200, n_f=10, n_hypers=3,
                        prev_params=prev_params).to(device)
+  
+  # with open('logs/mnist/ckpt.pt', 'rb') as f:
+  #   state_dict = torch.load(f)
+  #   gp.kernel.log_mean.data = state_dict.get('kernel.log_mean')
+  #   gp.kernel.log_logvar.data = state_dict.get('kernel.log_logvar')
+
   optim = torch.optim.Adam(gp.parameters(), lr=1e-2)
 
   N = len(dataset)
@@ -71,13 +77,16 @@ def train_gp(dataset, epochs=1, batch_size=512, prev_params=None, logger=None):
         
         logger.add_scalar('train/acc', acc, global_step=e + 1)
 
+        with open(f'{logger.log_dir}/ckpt.pt', 'wb') as f:
+          torch.save(state_dict, f)
+
   return gp.state_dict()
 
 
 def main(data_dir='/tmp', task_id=-1, epochs=2000, log_dir=None):
   logger = SummaryWriter(log_dir=log_dir) if log_dir is not None else None
 
-  train_dataset = SplitMNIST(f'{data_dir}/mnist_train', train=True)
+  train_dataset = SplitMNIST(f'{data_dir}/mnist', train=True)
   train_dataset.set_task(task_id)
 
   state_dict = train_gp(train_dataset, epochs=epochs, logger=logger)
