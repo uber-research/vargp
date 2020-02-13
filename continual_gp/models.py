@@ -57,10 +57,10 @@ class ContinualSVGP(nn.Module):
     n_hypers = theta.size(0)
 
     if m_old.dim() == 3:
-      m_old = m_old.unsqueeze(0)
+      m_old = m_old.unsqueeze(0).expand(n_hypers, -1, -1, -1)
 
     if L_old.dim() == 3:
-      L_old = L_old.unsqueeze(0)
+      L_old = L_old.unsqueeze(0).expand(n_hypers, -1, -1, -1)
 
     if m_cur.dim() == 3:
       m_cur = m_cur.unsqueeze(0)
@@ -77,7 +77,7 @@ class ContinualSVGP(nn.Module):
     LKinvKuf_LKinvm = torch.einsum('...ij,...ik->...jk', LKinvKuf, LKinvm)
 
     m_new = LKinvKuf_LKinvm + m_cur
-    m_joint = torch.cat([m_old.expand_as(m_new), m_new], dim=-2)
+    m_joint = torch.cat([m_old, m_new], dim=-2)
 
     ## Block 00
     S_old = torch.einsum('...ji,...ki->...jk', L_old, L_old)
@@ -85,7 +85,7 @@ class ContinualSVGP(nn.Module):
     ## Block 01
     LKinvLS, _ = torch.triangular_solve(L_old, Lkuu, upper=False)
     LKinvLS_LKinvKuf = torch.einsum('...ij,...ik->...jk', LKinvLS, LKinvKuf)
-    SoldAt = torch.einsum('...ji,...ik->...jk', L_old.expand_as(LKinvLS_LKinvKuf), LKinvLS_LKinvKuf)
+    SoldAt = torch.einsum('...ji,...ik->...jk', L_old, LKinvLS_LKinvKuf)
 
     ## Block 10
     ASoldt = torch.einsum('...ij->...ji', SoldAt)
@@ -96,7 +96,7 @@ class ContinualSVGP(nn.Module):
 
     # Combine all blocks
     cov_joint = torch.cat([
-      torch.cat([S_old.expand_as(SoldAt), SoldAt], dim=-1),
+      torch.cat([S_old, SoldAt], dim=-1),
       torch.cat([ASoldt, S_cur + ASoldAt], dim=-1)
     ], dim=-2)
 
