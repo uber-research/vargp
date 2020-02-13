@@ -11,6 +11,21 @@ from continual_gp.utils import vec2tril, process_params
 from continual_gp.datasets import SplitMNIST
 
 
+def compute_accuracy(dataset, gp, device=None):
+  loader = DataLoader(dataset, batch_size=512)
+
+  with torch.no_grad():
+    count = 0
+    for x, y in tqdm(loader, leave=False):
+      preds = gp.predict(x.to(device))
+      # print(torch.distributions.Categorical(preds).entropy().mean(dim=0))
+      count += (preds.argmax(dim=-1) == y.to(device)).sum().item()
+
+    acc = count / len(dataset)
+  
+  return acc
+
+
 def create_class_gp(dataset, M=20, n_f=10, n_hypers=3, prev_params=None):
   prev_params = process_params(prev_params)
 
@@ -34,11 +49,10 @@ def create_class_gp(dataset, M=20, n_f=10, n_hypers=3, prev_params=None):
   return gp
 
 
-def train_gp(dataset, epochs=1, M=20, n_f=10, n_hypers=3, batch_size=512,
-             prev_params=None, logger=None):
-  device = 'cuda' if torch.cuda.is_available() else 'cpu'
-  
-  gp = create_class_gp(dataset, M=M, n_f=n_f, n_hypers=n_hypers,
+def train_gp(train_dataset, eval_dataset,
+             epochs=1, M=20, n_f=10, n_hypers=3, batch_size=512, lr=1e-2,
+             prev_params=None, logger=None, device=None):  
+  gp = create_class_gp(train_dataset, M=M, n_f=n_f, n_hypers=n_hypers,
                        prev_params=prev_params).to(device)
   
   # with open('logs/mnist/ckpt.pt', 'rb') as f:
@@ -46,10 +60,10 @@ def train_gp(dataset, epochs=1, M=20, n_f=10, n_hypers=3, batch_size=512,
   #   gp.kernel.log_mean.data = state_dict.get('kernel.log_mean')
   #   gp.kernel.log_logvar.data = state_dict.get('kernel.log_logvar')
 
-  optim = torch.optim.Adam(gp.parameters(), lr=1e-2)
+  optim = torch.optim.Adam(gp.parameters(), lr=lr)
 
-  N = len(dataset)
-  loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+  N = len(train_dataset)
+  loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
   for e in tqdm(range(epochs)):
     for x, y in tqdm(loader, leave=False):
@@ -63,14 +77,8 @@ def train_gp(dataset, epochs=1, M=20, n_f=10, n_hypers=3, batch_size=512,
       optim.step()
 
     if (e + 1) % 10 == 0:
-      with torch.no_grad():
-        count = 0
-        for x, y in tqdm(loader, leave=False):
-          preds = gp.predict(x.to(device))
-          # print(torch.distributions.Categorical(preds).entropy().mean(dim=0))
-          count += (preds.argmax(dim=-1) == y.to(device)).sum().item()
-
-        acc = count / len(dataset)
+      acc = compute_accuracy(train_dataset, gp, device=device)
+      eval_acc = compute_accuracy(eval_dataset, gp, device=device)
 
       if logger is not None:
         logger.add_scalar('loss/kl_hypers', kl_hypers, global_step=e + 1)
@@ -78,6 +86,7 @@ def train_gp(dataset, epochs=1, M=20, n_f=10, n_hypers=3, batch_size=512,
         logger.add_scalar('loss/lik', lik, global_step=e + 1)
         
         logger.add_scalar('train/acc', acc, global_step=e + 1)
+        logger.add_scalar('eval/acc', eval_acc, global_step=e + 1)
 
         with open(f'{logger.log_dir}/ckpt.pt', 'wb') as f:
           torch.save(gp.state_dict(), f)
@@ -85,7 +94,9 @@ def train_gp(dataset, epochs=1, M=20, n_f=10, n_hypers=3, batch_size=512,
   return gp.state_dict()
 
 
-def main(data_dir='/tmp', epochs=100, n_inducing_points=20, log_dir=None):
+def main(data_dir='/tmp', epochs=500, n_inducing_points=20, lr=5e-3, log_dir=None):
+  device = 'cuda' if torch.cuda.is_available() else 'cpu'
+  
   prev_params = []
 
   for t in range(5):
@@ -96,11 +107,15 @@ def main(data_dir='/tmp', epochs=100, n_inducing_points=20, log_dir=None):
       continue
 
     train_dataset = SplitMNIST(f'{data_dir}/mnist', train=True)
-    train_dataset.set_task(t)
+    train_dataset.filter_classes([2 * t, 2 * t + 1])
+
+    eval_dataset = SplitMNIST(f'{data_dir}/mnist', train=True)
+    eval_dataset.filter_classes(range(2 * t + 2))
 
     logger = SummaryWriter(log_dir=f'{log_dir}/{t}') if log_dir is not None else None
-    state_dict = train_gp(train_dataset, epochs=epochs, M=n_inducing_points, logger=logger,
-                          prev_params=prev_params)
+    state_dict = train_gp(train_dataset, eval_dataset,
+                          epochs=epochs, M=n_inducing_points, lr=lr,
+                          prev_params=prev_params, logger=logger, device=device)
     if logger is not None:
       logger.close()
 

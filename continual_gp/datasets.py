@@ -11,25 +11,15 @@ class SplitMNIST(MNIST):
 
     self.task_ids = torch.arange(self.targets.size(0))
 
-  def set_task(self, i):
-    '''
-    There are five tasks implemented as a binary classifications
-    and each i refers to the classification of (2i) / (2i+1) classes.
-    e.g. task i = 4 will give out data for classes 8/9.
-    '''
-    assert -1 <= i <= 4, 'task IDs can be -1, 0, 1, 2, 3, 4'
+  def filter_classes(self, class_list=None):
+    if class_list:
+      mask = torch.zeros_like(self.targets).bool()
+      for c in class_list:
+        mask |= self.targets == c
+    else:
+      mask = torch.ones_like(self.targets).bool()
 
-    if i == -1:
-      self.task_ids = torch.arange(self.targets.size(0))
-      return
-    
-    self.task_ids = torch.masked_select(torch.arange(self.targets.size(0)),
-                                       (self.targets == 2 * i) | (self.targets == 2 * i + 1))
-
-    ## Only keep desired data and remap 2i -> 0/ 2i + 1 -> 1
-    # self.data = self.data[self.task_ids]
-    # self.targets = self.targets[self.task_ids] % 2
-    # self.task_ids = torch.arange(self.targets.size(0))
+    self.task_ids = torch.masked_select(torch.arange(self.targets.size(0)), mask)
 
   def __getitem__(self, index):
     """
