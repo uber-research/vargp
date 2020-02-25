@@ -33,3 +33,28 @@ class SplitMNIST(MNIST):
 
   def __len__(self):
     return self.task_ids.size(0)
+
+
+class PermutedMNIST(MNIST):
+  @staticmethod
+  def create_tasks(n=1):
+    return [torch.randperm(784) for _ in range(n)]
+
+  def __init__(self, *args, task=None, **kwargs):
+    kwargs['download'] = True
+    super().__init__(*args, **kwargs)
+
+    self.data = self.data.reshape(self.data.size(0), -1).float() / 255.
+
+    self.randperm = task if task is not None else torch.arange(self.data.size(-1))
+    self.data = self.data[:, self.randperm]
+
+  def __getitem__(self, index):
+    """
+    Args:
+        index (int): Index
+
+    Returns:
+        tuple: (image, target) where target is index of the target class.
+    """
+    return self.data[index], self.targets[index]

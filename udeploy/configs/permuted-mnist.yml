@@ -3,27 +3,33 @@ metric:
   name: task4/eval/acc
   goal: maximize
 parameters:
+  n_tasks:
+    distribution: constant
+    value: 4
   epochs:
     distribution: constant
-    value: 500
+    value: 1000
   M:
     distribution: int_uniform
     min: 20
-    max: 200
+    max: 500
   lr:
     distribution: uniform
     min: 0.001
-    max: 0.005
+    max: 0.01
   batch_size:
     distribution: constant
     value: 512
   beta:
     distribution: uniform
-    min: 4.0
+    min: 0.0
     max: 10.0
+  seed:
+    distribution: constant
+    value: 43
 command:
   - ${env}
   - python3
-  - /mnt/share/sanyam/src/continual_gp/experiments/split_mnist.py
+  - /mnt/share/sanyam/src/continual_gp/experiments/permuted_mnist.py
   - --data-dir=/tmp
   - ${args}

@@ -30,15 +30,3 @@ def vec2tril(vec, m=None):
   tril = torch.where(mask, F.softplus(tril), tril)
 
   return tril
-
-
-def process_params(params):
-  if params is None:
-    return None
-
-  def process(p):
-    if 'u_tril_vec' in p:
-      p['u_tril'] = vec2tril(p.pop('u_tril_vec'))
-    return p
-
-  return [process(p) for p in params]

@@ -11,7 +11,7 @@ def wb_sweep(project, sweep_id):
     f'WANDB_API_KEY={os.getenv("WANDB_API_KEY")}',
     f'WANDB_PROJECT={project}',
     f'WANDB_USERNAME=sanyam',
-    f'WANDB_DIR=/root/wandb',
+    f'WANDB_DIR=/root',
     f'WANDB_DISABLE_CODE=true',
   ])
 
@@ -30,9 +30,8 @@ def wb_sweep(project, sweep_id):
 
 
 def main(id, n=1):
-  if n:
-    for _ in range(n):
-      wb_sweep('continual_gp', id)
+  for _ in range(n):
+    wb_sweep('continual_gp', id)
 
 
 if __name__ == "__main__":
