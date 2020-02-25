@@ -3,6 +3,7 @@ from tqdm.auto import tqdm
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+import wandb
 
 from continual_gp.kernels import RBFKernel
 from continual_gp.likelihoods import MulticlassSoftmax
@@ -18,11 +19,10 @@ def compute_accuracy(dataset, gp, device=None):
     count = 0
     for x, y in tqdm(loader, leave=False):
       preds = gp.predict(x.to(device))
-      # print(torch.distributions.Categorical(preds).entropy().mean(dim=0))
       count += (preds.argmax(dim=-1) == y.to(device)).sum().item()
 
     acc = count / len(dataset)
-  
+
   return acc
 
 
@@ -49,16 +49,11 @@ def create_class_gp(dataset, M=20, n_f=10, n_hypers=3, prev_params=None):
   return gp
 
 
-def train_gp(train_dataset, eval_dataset,
+def train_gp(task_id, train_dataset, eval_dataset,
              epochs=1, M=20, n_f=10, n_hypers=3, batch_size=512, lr=1e-2,
-             prev_params=None, logger=None, device=None):  
+             beta=1.0, prev_params=None, logger=None, device=None):
   gp = create_class_gp(train_dataset, M=M, n_f=n_f, n_hypers=n_hypers,
                        prev_params=prev_params).to(device)
-  
-  # with open('logs/mnist/ckpt.pt', 'rb') as f:
-  #   state_dict = torch.load(f)
-  #   gp.kernel.log_mean.data = state_dict.get('kernel.log_mean')
-  #   gp.kernel.log_logvar.data = state_dict.get('kernel.log_logvar')
 
   optim = torch.optim.Adam(gp.parameters(), lr=lr)
 
@@ -69,60 +64,63 @@ def train_gp(train_dataset, eval_dataset,
     for x, y in tqdm(loader, leave=False):
       optim.zero_grad()
 
-      kl_hypers, kl_u, lik = gp.loss(x.to(device), y.to(device)) 
+      kl_hypers, kl_u, lik = gp.loss(x.to(device), y.to(device))
 
-      loss = kl_hypers + kl_u + (N / x.size(0)) * lik
+      loss = beta * kl_hypers + kl_u + (N / x.size(0)) * lik
       loss.backward()
-      
+
       optim.step()
 
-    if (e + 1) % 10 == 0:
+    if (e + 1) % 50 == 0:
       acc = compute_accuracy(train_dataset, gp, device=device)
       eval_acc = compute_accuracy(eval_dataset, gp, device=device)
 
-      if logger is not None:
-        logger.add_scalar('loss/kl_hypers', kl_hypers, global_step=e + 1)
-        logger.add_scalar('loss/kl_u', kl_u, global_step=e + 1)
-        logger.add_scalar('loss/lik', lik, global_step=e + 1)
-        
-        logger.add_scalar('train/acc', acc, global_step=e + 1)
-        logger.add_scalar('eval/acc', eval_acc, global_step=e + 1)
+      summary = {
+        f'task{task_id}/loss/kl_hypers': kl_hypers.detach().item(),
+        f'task{task_id}/loss/kl_u': kl_u.detach().item(),
+        f'task{task_id}/loss/lik': lik.detach().item(),
+        f'task{task_id}/train/acc': acc,
+        f'task{task_id}/eval/acc': eval_acc,
+      }
 
-        with open(f'{logger.log_dir}/ckpt.pt', 'wb') as f:
+      if logger is not None:
+        for k, v in summary.items():
+          logger.add_scalar(k, v, global_step=e + 1)
+
+        with open(f'{logger.log_dir}/ckpt{task_id}.pt', 'wb') as f:
           torch.save(gp.state_dict(), f)
+
+        wandb.save(f'{logger.log_dir}/ckpt{task_id}.pt')
 
   return gp.state_dict()
 
 
-def main(data_dir='/tmp', epochs=500, n_inducing_points=20, lr=5e-3, log_dir=None):
+def main(data_dir='/tmp', epochs=500, M=20, lr=1e-2, batch_size=512, beta=1.0):
+  wandb.init(tensorboard=True)
+
   device = 'cuda' if torch.cuda.is_available() else 'cpu'
-  
+  logger = SummaryWriter(log_dir=wandb.run.dir)
+
   prev_params = []
 
   for t in range(5):
-    if log_dir and os.path.isfile(f'{log_dir}/{t}/ckpt.pt'):
-      with open(f'{log_dir}/{t}/ckpt.pt', 'rb') as f:
-        prev_params.append(torch.load(f))
-      print(f'Loaded {log_dir}/{t}/ckpt.pt')
-      continue
-
     train_dataset = SplitMNIST(f'{data_dir}/mnist', train=True)
     train_dataset.filter_classes([2 * t, 2 * t + 1])
 
     eval_dataset = SplitMNIST(f'{data_dir}/mnist', train=True)
     eval_dataset.filter_classes(range(2 * t + 2))
 
-    logger = SummaryWriter(log_dir=f'{log_dir}/{t}') if log_dir is not None else None
-    state_dict = train_gp(train_dataset, eval_dataset,
-                          epochs=epochs, M=n_inducing_points, lr=lr,
+    state_dict = train_gp(t, train_dataset, eval_dataset,
+                          epochs=epochs, M=M, lr=lr, beta=beta, batch_size=batch_size,
                           prev_params=prev_params, logger=logger, device=device)
-    if logger is not None:
-      logger.close()
 
-    ## Comment this line to disable continual learning. 
     prev_params.append(state_dict)
+
+  logger.close()
 
 
 if __name__ == "__main__":
+  os.environ['WANDB_MODE'] = 'run' if os.environ.get('IS_UBUILD') else 'dryrun'
+
   import fire
   fire.Fire(main)

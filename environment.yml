@@ -11,6 +11,8 @@ dependencies:
     - numpy
     - tqdm
     - fire
+    - tensorboard
     - torch
     - torchvision
-    - tensorboard
+    # For experiment management only.
+    - michelangelo-python-client

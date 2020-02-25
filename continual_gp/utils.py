@@ -26,7 +26,8 @@ def vec2tril(vec, m=None):
   tril[..., idx[0], idx[1]] = vec
 
   # ensure positivity constraint of cholesky diagonals
-  tril[..., range(m), range(m)] = F.softplus(tril[..., range(m), range(m)])
+  mask = torch.eye(m, device=vec.device).bool()
+  tril = torch.where(mask, F.softplus(tril), tril)
 
   return tril
 
