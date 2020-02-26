@@ -11,7 +11,7 @@ class SplitMNIST(MNIST):
 
     self.task_ids = torch.arange(self.targets.size(0))
 
-  def filter_classes(self, class_list=None):
+  def filter_by_class(self, class_list=None):
     if class_list:
       mask = torch.zeros_like(self.targets).bool()
       for c in class_list:
@@ -20,6 +20,11 @@ class SplitMNIST(MNIST):
       mask = torch.ones_like(self.targets).bool()
 
     self.task_ids = torch.masked_select(torch.arange(self.targets.size(0)), mask)
+
+  def filter_by_idx(self, idx):
+    self.data = self.data[idx]
+    self.targets = self.targets[idx]
+    self.task_ids = torch.arange(self.targets.size(0))
 
   def __getitem__(self, index):
     """
@@ -40,14 +45,22 @@ class PermutedMNIST(MNIST):
   def create_tasks(n=1):
     return [torch.randperm(784) for _ in range(n)]
 
-  def __init__(self, *args, task=None, **kwargs):
+  def __init__(self, *args, **kwargs):
     kwargs['download'] = True
     super().__init__(*args, **kwargs)
 
     self.data = self.data.reshape(self.data.size(0), -1).float() / 255.
+    self.perm = None
 
-    self.randperm = task if task is not None else torch.arange(self.data.size(-1))
-    self.data = self.data[:, self.randperm]
+  def set_task(self, perm):
+    assert self.perm is None, 'Cannot set task again.'
+
+    self.data = self.data[:, perm]
+    self.perm = perm
+
+  def filter_by_idx(self, idx):
+    self.data = self.data[idx]
+    self.targets = self.targets[idx]
 
   def __getitem__(self, index):
     """

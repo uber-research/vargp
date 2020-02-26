@@ -1,11 +1,11 @@
 method: bayes
 metric:
-  name: task4/eval/acc
+  name: task9/val/acc_best
   goal: maximize
 parameters:
   n_tasks:
     distribution: constant
-    value: 4
+    value: 10
   epochs:
     distribution: constant
     value: 500
@@ -26,10 +26,10 @@ parameters:
     max: 10.0
   seed:
     distribution: constant
-    value: 43
+    value: 42
 command:
   - ${env}
   - python3
   - /mnt/share/sanyam/src/continual_gp/experiments/permuted_mnist.py
-  - --data-dir=/tmp
+  - --data-dir=/root
   - ${args}

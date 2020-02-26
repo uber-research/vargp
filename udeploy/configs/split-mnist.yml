@@ -1,6 +1,6 @@
 method: bayes
 metric:
-  name: task4/eval/acc
+  name: task4/val/acc_best
   goal: maximize
 parameters:
   epochs:
@@ -13,7 +13,7 @@ parameters:
   lr:
     distribution: uniform
     min: 0.001
-    max: 0.005
+    max: 0.01
   batch_size:
     distribution: constant
     value: 512
@@ -21,9 +21,12 @@ parameters:
     distribution: uniform
     min: 1.0
     max: 10.0
+  seed:
+    distribution: constant
+    value: 42
 command:
   - ${env}
   - python3
   - /mnt/share/sanyam/src/continual_gp/experiments/split_mnist.py
-  - --data-dir=/tmp
+  - --data-dir=/root
   - ${args}

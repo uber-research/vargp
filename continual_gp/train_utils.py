@@ -30,8 +30,8 @@ def process_params(params):
   return [process(p) for p in params]
 
 
-def compute_accuracy(dataset, gp, device=None):
-  loader = DataLoader(dataset, batch_size=512)
+def compute_accuracy(dataset, gp, batch_size=512, device=None):
+  loader = DataLoader(dataset, batch_size=batch_size)
 
   with torch.no_grad():
     count = 0
@@ -75,24 +75,24 @@ class EarlyStopper:
 
     self._counter = 0
 
-    self._best_state_dict = None
+    self._best_info = None
     self._best_score = None
 
   def is_done(self):
     return self._counter >= self.patience
 
-  def state_dict(self):
-    return self._best_state_dict
+  def info(self):
+    return self._best_info
 
-  def __call__(self, state_dict, score):
+  def __call__(self, score, info):
     assert not self.is_done()
 
     if self._best_score is None:
       self._best_score = score
-      self._best_state_dict = state_dict
+      self._best_info = info
     elif score < self._best_score + self.delta:
       self._counter += 1
     else:
       self._best_score = score
-      self._best_state_dict = state_dict
+      self._best_info = info
       self._counter = 0
