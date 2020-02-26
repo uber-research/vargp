@@ -19,7 +19,7 @@ parameters:
     value: 512
   beta:
     distribution: uniform
-    min: 4.0
+    min: 1.0
     max: 10.0
 command:
   - ${env}

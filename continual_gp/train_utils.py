@@ -64,4 +64,35 @@ def create_class_gp(dataset, M=20, n_f=10, n_hypers=3, prev_params=None):
   likelihood = MulticlassSoftmax(n_f=n_f)
   gp = ContinualSVGP(z, kernel, likelihood, n_hypers=n_hypers,
                      prev_params=prev_params)
-  return gp 
+  return gp
+
+
+# Reference: https://github.com/Bjarten/early-stopping-pytorch/blob/master/pytorchtools.py
+class EarlyStopper:
+  def __init__(self, patience=10, delta=1e-4):
+    self.patience = patience
+    self.delta = delta
+
+    self._counter = 0
+
+    self._best_state_dict = None
+    self._best_score = None
+
+  def is_done(self):
+    return self._counter >= self.patience
+
+  def state_dict(self):
+    return self._best_state_dict
+
+  def __call__(self, state_dict, score):
+    assert not self.is_done()
+
+    if self._best_score is None:
+      self._best_score = score
+      self._best_state_dict = state_dict
+    elif score < self._best_score + self.delta:
+      self._counter += 1
+    else:
+      self._best_score = score
+      self._best_state_dict = state_dict
+      self._counter = 0

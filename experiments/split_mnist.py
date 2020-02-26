@@ -6,14 +6,17 @@ from torch.utils.tensorboard import SummaryWriter
 import wandb
 
 from continual_gp.datasets import SplitMNIST
-from continual_gp.train_utils import create_class_gp, compute_accuracy, set_seeds
+from continual_gp.train_utils import create_class_gp, compute_accuracy, set_seeds, EarlyStopper
 
 
 def train(task_id, train_dataset, eval_dataset,
           epochs=1, M=20, n_f=10, n_hypers=3, batch_size=512, lr=1e-2,
-          beta=1.0, prev_params=None, logger=None, device=None):
+          beta=1.0, eval_interval=10,
+          prev_params=None, logger=None, device=None):
   gp = create_class_gp(train_dataset, M=M, n_f=n_f, n_hypers=n_hypers,
                        prev_params=prev_params).to(device)
+
+  stopper = EarlyStopper(patience=10)
 
   optim = torch.optim.Adam(gp.parameters(), lr=lr)
 
@@ -31,7 +34,7 @@ def train(task_id, train_dataset, eval_dataset,
 
       optim.step()
 
-    if (e + 1) % 50 == 0:
+    if (e + 1) % eval_interval == 0:
       acc = compute_accuracy(train_dataset, gp, device=device)
       eval_acc = compute_accuracy(eval_dataset, gp, device=device)
 
@@ -47,12 +50,18 @@ def train(task_id, train_dataset, eval_dataset,
         for k, v in summary.items():
           logger.add_scalar(k, v, global_step=e + 1)
 
-        with open(f'{logger.log_dir}/ckpt{task_id}.pt', 'wb') as f:
-          torch.save(gp.state_dict(), f)
+      stopper(gp.state_dict(), eval_acc)
+      if stopper.is_done():
+        break
 
-        wandb.save(f'{logger.log_dir}/ckpt{task_id}.pt')
+  viz_ind_pts = stopper.state_dict().get('z')[2*task_id:2*task_id+2][:, torch.randperm(M)[:8], :].view(16, 1, 28, 28)
+  logger.add_images(f'task{task_id}/inducing', viz_ind_pts, global_step=e + 1)
 
-  return gp.state_dict()
+  with open(f'{logger.log_dir}/ckpt{task_id}.pt', 'wb') as f:
+    torch.save(stopper.state_dict(), f)
+  wandb.save(f'{logger.log_dir}/ckpt{task_id}.pt')
+
+  return stopper.state_dict()
 
 
 def main(data_dir='/tmp', epochs=500, M=20, lr=1e-2, batch_size=512, beta=1.0, seed=None):
