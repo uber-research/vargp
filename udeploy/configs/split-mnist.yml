@@ -27,6 +27,7 @@ parameters:
 command:
   - ${env}
   - python3
-  - /mnt/share/sanyam/src/continual_gp/experiments/split_mnist.py
+  - /mnt/share/sanyam/src/continual_gp/experiments/mnist.py
+  - s-mnist
   - --data-dir=/root
   - ${args}

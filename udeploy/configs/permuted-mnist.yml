@@ -22,7 +22,7 @@ parameters:
     value: 512
   beta:
     distribution: uniform
-    min: 0.0
+    min: 1.0
     max: 10.0
   seed:
     distribution: constant
@@ -30,6 +30,7 @@ parameters:
 command:
   - ${env}
   - python3
-  - /mnt/share/sanyam/src/continual_gp/experiments/permuted_mnist.py
+  - /mnt/share/sanyam/src/continual_gp/experiments/mnist.py
+  - p-mnist
   - --data-dir=/root
   - ${args}
