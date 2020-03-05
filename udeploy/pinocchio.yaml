@@ -7,8 +7,8 @@ template:
   family: michelangelo
   name: uber-dl-gpu-1.2
   pre_build_cmds:
-    - RUN pip3 install numpy tqdm fire tensorboard ruamel.yaml wandb
-    - RUN pip3 install 'torch==1.4.0+cu100' 'torchvision==0.5.0+cu100' -f https://download.pytorch.org/whl/torch_stable.html
+    - RUN pip3 install -U numpy tqdm fire tensorboard ruamel.yaml wandb
+    - RUN pip3 install -U 'torch==1.4.0+cu100' 'torchvision==0.5.0+cu100' -f https://download.pytorch.org/whl/torch_stable.html
   build_cmds: []
   post_build_cmds:
     - ENV MNT_DIR=/mnt/share/sanyam PYTHONPATH=/mnt/share/sanyam/src/continual_gp:${PYTHONPATH}

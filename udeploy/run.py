@@ -1,6 +1,8 @@
 import os
 import glob
 import subprocess
+import time
+import logging
 from kondo.utils import to_argv
 from kondo import Spec
 from kondo.spec import ParamSpec as AxSpec
@@ -23,17 +25,26 @@ def wb_sweep(project, sweep_id):
 
   arg_str = ' '.join(args)
 
+  logging.debug(arg_str)
+
   proc = subprocess.Popen(arg_str, shell=True)
   proc.communicate()
 
   assert proc.returncode == 0, 'non-zero exit code {} found!'.format(proc.returncode)
 
 
-def main(id, n=1):
+def main(id, n=1, delay=1):
   for _ in range(n):
-    wb_sweep('continual_gp', id)
+    wb_sweep('cgp', id)
+    if delay:
+      logging.debug(f'Delaying {delay}s')
+      time.sleep(delay)
 
 
 if __name__ == "__main__":
+  logging.basicConfig(format='%(levelname)s %(asctime)s %(message)s',
+                      datefmt='%Y%m%d-%I:%M:%S%p',
+                      level=getattr(logging, os.getenv('LOGLEVEL', 'WARNING')))
+
   import fire
   fire.Fire(main)

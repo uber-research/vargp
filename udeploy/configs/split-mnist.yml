@@ -1,33 +1,23 @@
-method: bayes
-metric:
-  name: task4/val/acc_best
-  goal: maximize
+method: grid
 parameters:
   epochs:
-    distribution: constant
     value: 500
   M:
-    distribution: int_uniform
-    min: 20
-    max: 200
+    value: 60
   lr:
-    distribution: uniform
-    min: 0.001
-    max: 0.01
+    value: 0.003
   batch_size:
-    distribution: constant
     value: 512
   beta:
-    distribution: uniform
-    min: 1.0
-    max: 10.0
+    value: 10.0
+  ep_var_mean:
+    values: [0, 1]
   seed:
-    distribution: constant
-    value: 42
+    values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 command:
   - ${env}
   - python3
   - /mnt/share/sanyam/src/continual_gp/experiments/mnist.py
   - s-mnist
-  - --data-dir=/root
+  - --data-dir=/mnt/share/sanyam/datasets
   - ${args}

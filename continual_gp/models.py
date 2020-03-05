@@ -7,16 +7,11 @@ from .utils import vec2tril
 
 
 class ContinualSVGP(nn.Module):
-  '''
-  Arguments:
-    z_init: Initial inducing points out_size x M x in_size
-    prev_params: List of old inducing points
-  '''
   def __init__(self, z_init, kernel, likelihood, n_var_samples=1, jitter=1e-4,
                ep_var_mean=True, prev_params=None):
     super().__init__()
 
-    self.ep_var_mean = ep_var_mean
+    self.var_mean_mask = 1.0 if ep_var_mean else 0.0
     self.prev_params = prev_params or []
 
     self.M = z_init.size(-2)
@@ -197,10 +192,7 @@ class ContinualSVGP(nn.Module):
         LKinvKuf_LKinvult = torch.einsum('...ij,...ik->...jk', LKinvKuf, LKinvult)
 
         # Statistics for q(u_t | u_{< t}, θ)
-        mu_t = self.u_mean.unsqueeze(0).unsqueeze(0)
-        if self.ep_var_mean:
-          mu_t = LKinvKuf_LKinvult + mu_t 
-        mu_t = mu_t.squeeze(-1)
+        mu_t = (LKinvKuf_LKinvult * self.var_mean_mask + self.u_mean.unsqueeze(0).unsqueeze(0)).squeeze(-1)
         L_cov_t = u_tril.unsqueeze(0).unsqueeze(0)
 
         # Statistics for p(u_t| u_{< t}, θ)

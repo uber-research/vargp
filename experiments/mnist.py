@@ -73,7 +73,7 @@ def train(task_id, train_set, val_set, test_set, ep_var_mean=True,
 
 
 def split_mnist(data_dir='/tmp', epochs=500, M=60, lr=3e-3,
-                batch_size=512, beta=10.0, ep_var_mean=True, seed=42):
+                batch_size=512, beta=10.0, ep_var_mean=True, seed=None):
   set_seeds(seed)
 
   wandb.init(tensorboard=True)
@@ -105,8 +105,8 @@ def split_mnist(data_dir='/tmp', epochs=500, M=60, lr=3e-3,
   logger.close()
 
 
-def permuted_mnist(data_dir='/tmp', n_tasks=10, epochs=500, M=100, lr=9e-3,
-                   batch_size=512, beta=2.0, ep_var_mean=True, seed=42):
+def permuted_mnist(data_dir='/tmp', n_tasks=10, epochs=500, M=100, lr=1e-2,
+                   batch_size=512, beta=1.0, ep_var_mean=True, seed=None):
   set_seeds(seed)
 
   wandb.init(tensorboard=True)
@@ -115,7 +115,7 @@ def permuted_mnist(data_dir='/tmp', n_tasks=10, epochs=500, M=100, lr=9e-3,
   logger = SummaryWriter(log_dir=wandb.run.dir)
 
   ## NOTE: First task is unpermuted MNIST.
-  tasks = [torch.arange(784)] + PermutedMNIST.create_tasks(n=n_tasks)
+  tasks = [torch.arange(784)] + PermutedMNIST.create_tasks(n=n_tasks - 1)
 
   mnist_train = PermutedMNIST(f'{data_dir}', train=True)
 
