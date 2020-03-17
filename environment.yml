@@ -12,7 +12,9 @@ dependencies:
     - tqdm
     - fire
     - tensorboard
+    - wandb
     - torch
     - torchvision
     # For experiment management only.
+    - kondo
     - michelangelo-python-client

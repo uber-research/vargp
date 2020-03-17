@@ -1,28 +1,22 @@
-method: bayes
-metric:
-  name: task1/val/acc_best
-  goal: maximize
+## This is to check the Bayesian v/s MAP kernel hyperparameters.
+method: grid
 parameters:
   n_tasks:
-    value: 2
+    value: 10
   epochs:
     value: 500
   M:
-    min: 20
-    max: 200
+    value: 100
   lr:
-    min: 0.001
-    max: 0.01
+    value: 0.002
   batch_size:
     value: 512
   beta:
-    distribution: uniform
-    min: 1.0
-    max: 10.0
-  ep_var_mean:
-    value: 1
+    value: 3.0
+  map_est_hypers:
+    values: [0, 1]
   seed:
-    value: 10
+    values: [1, 2, 3, 4, 5]
 command:
   - ${env}
   - python3

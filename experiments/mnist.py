@@ -9,11 +9,12 @@ from continual_gp.datasets import SplitMNIST, PermutedMNIST
 from continual_gp.train_utils import set_seeds, create_class_gp, compute_accuracy, EarlyStopper
 
 
-def train(task_id, train_set, val_set, test_set, ep_var_mean=True,
+def train(task_id, train_set, val_set, test_set, ep_var_mean=True, map_est_hypers=False,
           epochs=1, M=20, n_f=10, n_var_samples=3, batch_size=512, lr=1e-2, beta=1.0,
           eval_interval=10, patience=20, prev_params=None, logger=None, device=None):
   gp = create_class_gp(train_set, M=M, n_f=n_f, n_var_samples=n_var_samples,
-                       ep_var_mean=ep_var_mean, prev_params=prev_params).to(device)
+                       ep_var_mean=ep_var_mean, map_est_hypers=map_est_hypers,
+                       prev_params=prev_params).to(device)
 
   stopper = EarlyStopper(patience=patience)
 
@@ -73,7 +74,8 @@ def train(task_id, train_set, val_set, test_set, ep_var_mean=True,
 
 
 def split_mnist(data_dir='/tmp', epochs=500, M=60, lr=3e-3,
-                batch_size=512, beta=10.0, ep_var_mean=True, seed=None):
+                batch_size=512, beta=10.0, ep_var_mean=True, map_est_hypers=False,
+                seed=None):
   set_seeds(seed)
 
   wandb.init(tensorboard=True)
@@ -98,15 +100,17 @@ def split_mnist(data_dir='/tmp', epochs=500, M=60, lr=3e-3,
     
     state_dict = train(t, mnist_train, mnist_val, mnist_test,
                        epochs=epochs, M=M, lr=lr, beta=beta, batch_size=batch_size,
-                       ep_var_mean=bool(ep_var_mean), prev_params=prev_params, logger=logger, device=device)
+                       ep_var_mean=bool(ep_var_mean), map_est_hypers=bool(map_est_hypers),
+                       prev_params=prev_params, logger=logger, device=device)
 
     prev_params.append(state_dict)
 
   logger.close()
 
 
-def permuted_mnist(data_dir='/tmp', n_tasks=10, epochs=500, M=100, lr=1e-2,
-                   batch_size=512, beta=1.0, ep_var_mean=True, seed=None):
+def permuted_mnist(data_dir='/tmp', n_tasks=1, epochs=500, M=100, lr=2e-3,
+                   batch_size=512, beta=3.0, ep_var_mean=True, map_est_hypers=False,
+                   seed=None):
   set_seeds(seed)
 
   wandb.init(tensorboard=True)
@@ -141,7 +145,8 @@ def permuted_mnist(data_dir='/tmp', n_tasks=10, epochs=500, M=100, lr=1e-2,
 
     state_dict = train(t, mnist_train, ConcatDataset(mnist_val), ConcatDataset(mnist_test),
                        epochs=epochs, M=M, lr=lr, beta=beta, batch_size=batch_size,
-                       ep_var_mean=bool(ep_var_mean), prev_params=prev_params, logger=logger, device=device)
+                       ep_var_mean=bool(ep_var_mean), map_est_hypers=bool(map_est_hypers),
+                       prev_params=prev_params, logger=logger, device=device)
 
     prev_params.append(state_dict)
 

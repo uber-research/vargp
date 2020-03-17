@@ -4,8 +4,6 @@ import subprocess
 import time
 import logging
 from kondo.utils import to_argv
-from kondo import Spec
-from kondo.spec import ParamSpec as AxSpec
 
 
 def wb_sweep(project, sweep_id):

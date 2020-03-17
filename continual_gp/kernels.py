@@ -5,8 +5,10 @@ from torch.distributions.kl import kl_divergence
 
 
 class RBFKernel(nn.Module):
-    def __init__(self, in_size, prior_log_mean=None, prior_log_logvar=None):
+    def __init__(self, in_size, prior_log_mean=None, prior_log_logvar=None, map_est=False):
         super().__init__()
+
+        self.map_est = map_est
 
         # Variational Parameters (log lengthscale and log scale factor)
         log_init = torch.tensor(.5).log() * torch.ones(in_size + 1) \
@@ -58,11 +60,17 @@ class RBFKernel(nn.Module):
         return gamma2
 
     def sample_hypers(self, n_hypers):
+        if self.map_est:
+            return self.log_mean.unsqueeze(0)
+
         log_dist = dist.Normal(self.log_mean, self.log_logvar.exp().sqrt())
         log_hypers = log_dist.rsample(torch.Size([n_hypers]))
         return log_hypers
 
     def kl_hypers(self):
+        if self.map_est:
+            return torch.tensor(0.0, device=self.log_mean.device)
+
         var_dist = dist.Normal(self.log_mean, self.log_logvar.exp().sqrt())
         prior_dist = dist.Normal(self.prior_log_mean, self.prior_log_logvar.exp().sqrt())
         total_kl = kl_divergence(var_dist, prior_dist).sum(dim=0)

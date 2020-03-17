@@ -1,0 +1,22 @@
+## This is to check the variational mean conditioning.
+method: grid
+parameters:
+  epochs:
+    value: 500
+  M:
+    values: [20, 40, 60, 80, 100, 120, 140, 160, 180, 200]
+  lr:
+    value: 0.003
+  batch_size:
+    value: 512
+  beta:
+    value: 10.0
+  seed:
+    value: 1
+command:
+  - ${env}
+  - python3
+  - /mnt/share/sanyam/src/continual_gp/experiments/mnist.py
+  - s-mnist
+  - --data-dir=/mnt/share/sanyam/datasets
+  - ${args}

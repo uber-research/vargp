@@ -44,7 +44,9 @@ def compute_accuracy(dataset, gp, batch_size=512, device=None):
   return acc
 
 
-def create_class_gp(dataset, M=20, n_f=10, n_var_samples=3, ep_var_mean=True, prev_params=None):
+def create_class_gp(dataset, M=20, n_f=10, n_var_samples=3,
+                    ep_var_mean=True, map_est_hypers=False,
+                    prev_params=None):
   prev_params = process_params(prev_params)
 
   N = len(dataset)
@@ -60,7 +62,8 @@ def create_class_gp(dataset, M=20, n_f=10, n_var_samples=3, ep_var_mean=True, pr
     prior_log_mean = prev_params[-1].get('kernel.log_mean')
     prior_log_logvar = prev_params[-1].get('kernel.log_logvar')
 
-  kernel = RBFKernel(z.size(-1), prior_log_mean=prior_log_mean, prior_log_logvar=prior_log_logvar)
+  kernel = RBFKernel(z.size(-1), prior_log_mean=prior_log_mean, prior_log_logvar=prior_log_logvar,
+                     map_est=map_est_hypers)
   likelihood = MulticlassSoftmax(n_f=n_f)
   gp = ContinualSVGP(z, kernel, likelihood, n_var_samples=n_var_samples,
                      ep_var_mean=ep_var_mean, prev_params=prev_params)
