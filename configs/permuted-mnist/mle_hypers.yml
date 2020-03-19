@@ -1,24 +1,26 @@
 ## This is to check the Bayesian v/s MAP kernel hyperparameters.
 method: grid
 parameters:
+  n_tasks:
+    value: 10
   epochs:
-    value: 500
+    value: 1000
   M:
-    value: 60
+    value: 100
   lr:
-    value: 0.003
+    value: 0.001
   batch_size:
     value: 512
   beta:
-    value: 10.0
+    value: 3.0
   map_est_hypers:
     values: [0, 1]
   seed:
-    values: [1, 2, 3, 4, 5]
+    values: [1, 3, 20, 40, 50]
 command:
   - ${env}
   - python3
   - /mnt/share/sanyam/src/continual_gp/experiments/mnist.py
-  - s-mnist
+  - p-mnist
   - --data-dir=/mnt/share/sanyam/datasets
   - ${args}

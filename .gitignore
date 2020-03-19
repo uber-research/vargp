@@ -1,3 +1,6 @@
+# MacOS
+.DS_Store
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -139,3 +142,6 @@ env/
 
 # Weights & Biases
 wandb/
+
+# Notebook outputs
+notebooks/**/*.png

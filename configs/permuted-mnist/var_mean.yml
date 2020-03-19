@@ -4,7 +4,7 @@ parameters:
   n_tasks:
     value: 10
   epochs:
-    value: 500
+    value: 1000
   M:
     value: 100
   lr:
