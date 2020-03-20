@@ -1,3 +1,9 @@
+## Installation
+
+```
+$ pip3 install kondo michelangelo-python-client
+```
+
 ## uDeploy example command
 
 ```

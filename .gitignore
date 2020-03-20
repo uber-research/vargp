@@ -145,3 +145,6 @@ wandb/
 
 # Notebook outputs
 notebooks/**/*.png
+
+# Custom
+tmp.yml

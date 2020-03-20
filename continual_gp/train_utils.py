@@ -1,6 +1,7 @@
 import random
 import numpy as np
 import torch
+import torch_optimizer
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 import wandb
@@ -38,6 +39,9 @@ def compute_accuracy(dataset, gp, batch_size=512, device=None):
     count = 0
     for x, y in tqdm(loader, leave=False):
       preds = gp.predict(x.to(device))
+
+      assert not torch.isnan(preds).any(), 'Found NaNs'
+
       count += (preds.argmax(dim=-1) == y.to(device)).sum().item()
 
     acc = count / len(dataset)
@@ -104,14 +108,15 @@ class EarlyStopper:
 
 def train(task_id, train_set, val_set, test_set, ep_var_mean=True, map_est_hypers=False,
           epochs=1, M=20, n_f=10, n_var_samples=3, batch_size=512, lr=1e-2, beta=1.0,
-          eval_interval=10, patience=40, prev_params=None, logger=None, device=None):
+          eval_interval=10, patience=20, prev_params=None, logger=None, device=None):
   gp = create_class_gp(train_set, M=M, n_f=n_f, n_var_samples=n_var_samples,
                        ep_var_mean=ep_var_mean, map_est_hypers=map_est_hypers,
                        prev_params=prev_params).to(device)
 
   stopper = EarlyStopper(patience=patience)
 
-  optim = torch.optim.Adam(gp.parameters(), lr=lr)
+  # optim = torch.optim.Adam(gp.parameters(), lr=lr)
+  optim = torch_optimizer.Yogi(gp.parameters(), lr=lr)
 
   N = len(train_set)
   loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
@@ -156,9 +161,6 @@ def train(task_id, train_set, val_set, test_set, ep_var_mean=True, map_est_hyper
   if logger is not None:
     for k, v in info.get('acc_summary').items():
       logger.add_scalar(f'{k}_best', v, global_step=info.get('step'))
-
-    # viz_ind_pts = info.get('state_dict').get('z')[2*task_id:2*task_id+2][:, torch.randperm(M)[:8], :].view(16, 1, 28, 28)
-    # logger.add_images(f'task{task_id}/inducing', viz_ind_pts, global_step=e + 1)
 
     with open(f'{logger.log_dir}/ckpt{task_id}.pt', 'wb') as f:
       torch.save(info.get('state_dict'), f)

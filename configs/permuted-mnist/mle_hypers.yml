@@ -4,7 +4,7 @@ parameters:
   n_tasks:
     value: 10
   epochs:
-    value: 1000
+    value: 500
   M:
     value: 100
   lr:
@@ -16,7 +16,7 @@ parameters:
   map_est_hypers:
     values: [0, 1]
   seed:
-    values: [1, 3, 20, 40, 50]
+    values: [1, 20, 3, 40, 50]
 command:
   - ${env}
   - python3

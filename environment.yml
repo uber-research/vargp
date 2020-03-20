@@ -15,6 +15,4 @@ dependencies:
     - wandb
     - torch
     - torchvision
-    # For experiment management only.
-    - kondo
-    - michelangelo-python-client
+    - torch_optimizer
