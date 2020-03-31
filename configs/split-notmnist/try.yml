@@ -1,0 +1,21 @@
+method: random
+parameters:
+  epochs:
+    value: 500
+  M:
+    min: 40
+    max: 300
+  lr:
+    min: 0.005
+    max: 0.05
+  batch_size:
+    value: 512
+  beta:
+    min: 1.0
+    max: 10.0
+command:
+  - ${env}
+  - python3
+  - /mnt/share/sanyam/src/continual_gp/experiments/not_mnist.py
+  - --data-dir=/mnt/share/sanyam/datasets
+  - ${args}

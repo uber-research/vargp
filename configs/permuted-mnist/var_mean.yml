@@ -1,5 +1,5 @@
 ## This is to check the variational mean conditioning.
-method: grid
+method: random
 parameters:
   n_tasks:
     value: 10
@@ -8,15 +8,11 @@ parameters:
   M:
     value: 100
   lr:
-    value: 0.002
+    value: 0.0037
   batch_size:
     value: 512
   beta:
-    value: 3.0
-  ep_var_mean:
-    values: [0, 1]
-  seed:
-    values: [1, 2, 3, 4, 5]
+    value: 1.64
 command:
   - ${env}
   - python3

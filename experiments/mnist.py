@@ -44,8 +44,8 @@ def split_mnist(data_dir='/tmp', epochs=500, M=60, lr=3e-3,
   logger.close()
 
 
-def permuted_mnist(data_dir='/tmp', n_tasks=1, epochs=500, M=100, lr=2e-3,
-                   batch_size=512, beta=3.0, ep_var_mean=True, map_est_hypers=False,
+def permuted_mnist(data_dir='/tmp', n_tasks=10, epochs=1000, M=100, lr=3.7e-3,
+                   batch_size=512, beta=1.64, ep_var_mean=True, map_est_hypers=False,
                    seed=None):
   set_seeds(seed)
 
