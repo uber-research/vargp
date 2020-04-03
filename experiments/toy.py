@@ -8,7 +8,7 @@ from continual_gp.datasets import ToyDataset
 from continual_gp.train_utils import set_seeds, train
 
 
-def main(data_dir='/tmp', epochs=10000, M=20, lr=1e-2,
+def main(data_dir='/tmp', epochs=5000, M=20, lr=1e-2,
          batch_size=512, beta=1.0, ep_var_mean=True, map_est_hypers=False,
          seed=None):
   set_seeds(seed)
@@ -31,7 +31,7 @@ def main(data_dir='/tmp', epochs=10000, M=20, lr=1e-2,
     state_dict = train(t, toy_train, toy_val, toy_test,
                        epochs=epochs, M=M, lr=lr, beta=beta, batch_size=batch_size,
                        ep_var_mean=bool(ep_var_mean), map_est_hypers=bool(map_est_hypers),
-                       prev_params=prev_params, logger=logger, device=device)
+                       prev_params=prev_params, logger=logger, device=device, patience=-1)
 
     prev_params.append(state_dict)
 

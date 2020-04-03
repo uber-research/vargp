@@ -87,7 +87,9 @@ class EarlyStopper:
     self._best_score = None
 
   def is_done(self):
-    return self._counter >= self.patience
+    if self.patience >= 0:
+      return self._counter >= self.patience
+    return False
 
   def info(self):
     return self._best_info
