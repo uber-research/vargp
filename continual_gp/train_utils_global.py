@@ -20,10 +20,23 @@ def create_class_gp(dataset, M=20, n_f=10, n_var_samples=3,
   N = len(dataset)
   out_size = torch.unique(dataset.targets).size(0)
 
-  # init inducing points at random data points.
-  z = torch.stack([
-    dataset[torch.randperm(N)[:M]][0]
-    for _ in range(out_size)])
+  if prev_params:
+    z_prev = prev_params[-1].get('z')
+    z_new = []
+    for i in range(out_size):
+      z_prev_i = z_prev[i]
+      M_prev_i = z_prev_i.shape[0]
+      # this silently assumes more inducing points for additional tasks
+      M_add_i = M - M_prev_i
+      z_add_i = dataset[torch.randperm(N)[:M_add_i]][0]
+      z_i = torch.cat([z_prev_i, z_add_i], 0)
+      z_new.append(z_i)
+    z = torch.stack(z_new)
+  else:
+    # init inducing points at random data points.
+    z = torch.stack([
+      dataset[torch.randperm(N)[:M]][0]
+      for _ in range(out_size)])
 
   prior_log_mean, prior_log_logvar = None, None
   if prev_params:
