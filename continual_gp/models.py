@@ -6,7 +6,7 @@ from torch.distributions.kl import kl_divergence
 from .utils import vec2tril
 
 
-class ContinualSVGP(nn.Module):
+class VARGP(nn.Module):
   def __init__(self, z_init, kernel, likelihood, n_var_samples=1, jitter=1e-4,
                ep_var_mean=True, prev_params=None):
     super().__init__()

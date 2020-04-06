@@ -21,7 +21,7 @@ def create_class_gp(dataset, M=20, n_f=10, n_var_samples=3,
   out_size = torch.unique(dataset.targets).size(0)
 
   if prev_params:
-    z_prev = prev_params[-1].get('z')
+    z_prev = prev_params[-1].get('z').cpu()
     z_new = []
     for i in range(out_size):
       z_prev_i = z_prev[i]
