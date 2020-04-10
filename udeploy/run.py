@@ -18,7 +18,7 @@ def wb_sweep(project, sweep_id):
   label = f'{project}:{sweep_id.split("/")[-1]}'
 
   args = ['ma train tf docker --zone phx4-prod02 --respool /UberAI/Default'] + \
-         [f'--label {label} --name-suffix [{label}] --num-cpus 8 --memory-size-mb 24576 --num-gpus 1'] + \
+         [f'--label {label} --name-suffix [{label}] --num-cpus 8 --memory-size-mb 65536 --num-gpus 1'] + \
          [f'--custom-docker={os.getenv("CGP_DOCKER_IMAGE")} --command-line \'{wb_envs} wandb agent --count=1 {sweep_id}\'']
 
   arg_str = ' '.join(args)
