@@ -2,7 +2,7 @@ import os
 import glob
 import torch
 import numpy as np
-from PIL import Image, UnidentifiedImageError
+# from PIL import Image, UnidentifiedImageError
 from torch.utils.data import Dataset
 from torchvision.datasets import MNIST, VisionDataset
 from torchvision.datasets.utils import makedir_exist_ok, download_and_extract_archive
