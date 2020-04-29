@@ -28,10 +28,10 @@ functions are mentioned to look for CLI arguments to change. The default argumen
 
 ### Toy Dataset
 
-CLI Arguments: See `main` method.
+CLI Arguments: See `toy` method.
 
 ```shell
-python experiments/toy.py
+python experiments/vargp.py toy
 ```
 
 ### Split MNIST
@@ -39,7 +39,7 @@ python experiments/toy.py
 CLI Arguments: See `split_mnist` method.
 
 ```shell
-python experiments/mnist.py s-mnist
+python experiments/vargp.py s-mnist
 ```
 
 ### Permuted MNIST
@@ -47,7 +47,7 @@ python experiments/mnist.py s-mnist
 CLI Arguments: See `permuted_mnist` method.
 
 ```shell
-python experiments/mnist.py p-mnist
+python experiments/vargp.py p-mnist
 ```
 
 ### Checkpoints and Graphs

@@ -1,8 +1,7 @@
-## This is to check the variational mean conditioning.
 method: random
 parameters:
   n_tasks:
-    value: 10
+    value: 5
   epochs:
     value: 1000
   M:
@@ -13,10 +12,14 @@ parameters:
     value: 512
   beta:
     value: 1.64
+  # ep_var_mean:
+  #   values: [1, 0]
+  # map_est_hypers:
+  #   values: [0, 1]
 command:
   - ${env}
   - python3
-  - /mnt/share/sanyam/src/continual_gp/experiments/mnist.py
+  - /mnt/share/sanyam/src/continual_gp/experiments/vargp.py
   - p-mnist
   - --data-dir=/mnt/share/sanyam/datasets
   - ${args}

@@ -1,5 +1,4 @@
-## This is to check the variational mean conditioning.
-method: grid
+method: random
 parameters:
   epochs:
     value: 500
@@ -11,14 +10,14 @@ parameters:
     value: 512
   beta:
     value: 10.0
-  ep_var_mean:
-    values: [0, 1]
-  seed:
-    values: [1, 2, 3, 4, 5]
+  # ep_var_mean:
+  #   values: [1, 0]
+  # map_est_hypers:
+  #   values: [0, 1]
 command:
   - ${env}
   - python3
-  - /mnt/share/sanyam/src/continual_gp/experiments/mnist.py
+  - /mnt/share/sanyam/src/continual_gp/experiments/vargp.py
   - s-mnist
   - --data-dir=/mnt/share/sanyam/datasets
   - ${args}
