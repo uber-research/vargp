@@ -8,24 +8,16 @@ from .kernels import RBFKernel
 from .likelihoods import MulticlassSoftmax
 
 
-def process_params(params):
-  if params is None:
-    return None
-
-  def process(p):
-    if 'u_tril_vec' in p:
-      p['u_tril'] = vec2tril(p.pop('u_tril_vec'))
-    return p
-
-  return [process(p) for p in params]
-
-
 class VARGP(nn.Module):
   def __init__(self, z_init, kernel, likelihood, n_var_samples=1, ep_var_mean=True, prev_params=None):
     super().__init__()
 
     self.var_mean_mask = float(ep_var_mean)
-    self.prev_params = prev_params or []
+
+    self.prev_params = [
+      dict(z=p['z'], u_mean=p['u_mean'], u_tril=vec2tril(p['u_tril_vec']))
+      for p in (prev_params or [])
+    ]
 
     self.M = z_init.size(-2)
 
@@ -207,8 +199,6 @@ class VARGP(nn.Module):
   @staticmethod
   def create_clf(dataset, M=20, n_f=10, n_var_samples=3, prev_params=None,
                  ep_var_mean=True, map_est_hypers=False):
-    prev_params = process_params(prev_params)
-
     N = len(dataset)
     out_size = torch.unique(dataset.targets).size(0)
 
@@ -221,6 +211,14 @@ class VARGP(nn.Module):
     if prev_params:
       prior_log_mean = prev_params[-1].get('kernel.log_mean')
       prior_log_logvar = prev_params[-1].get('kernel.log_logvar')
+
+      def process(p):
+        for k in list(p.keys()):
+          if k.startswith('kernel'):
+            p.pop(k)
+        return p
+
+      prev_params = [process(p) for p in prev_params]
 
     kernel = RBFKernel(z.size(-1), prior_log_mean=prior_log_mean,
                        prior_log_logvar=prior_log_logvar, map_est=map_est_hypers)
