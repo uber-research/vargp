@@ -170,6 +170,6 @@ def linear_marginal_diag(m, S, Kzz, Kzx, Kxx_diag, cache=None):
   Σ = Kxx_diag - diag1 + diag2
 
   if isinstance(cache, dict):
-    cache.update(dict(Lz=Lz))
+    cache.update(dict(Lz=Lz, Lz_Kzx=Lz_Kzx))
 
   return μ, Σ

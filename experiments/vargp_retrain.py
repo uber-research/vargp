@@ -29,9 +29,9 @@ def train(task_id, train_set, val_set, test_set, ep_var_mean=True, map_est_hyper
     for x, y in tqdm(loader, leave=False):
       optim.zero_grad()
 
-      kl_hypers, kl_u, kl_u_lt, lik = gp.loss(x.to(device), y.to(device))
+      kl_hypers, kl_u, kl_u_lt, kl_pf, lik = gp.loss(x.to(device), y.to(device))
 
-      loss = beta * kl_hypers + kl_u + kl_u_lt + (N / x.size(0)) * lik
+      loss = beta * kl_hypers + kl_u + kl_u_lt + kl_pf + (N / x.size(0)) * lik
       loss.backward()
 
       optim.step()
@@ -45,6 +45,7 @@ def train(task_id, train_set, val_set, test_set, ep_var_mean=True, map_est_hyper
         f'task{task_id}/loss/kl_hypers': kl_hypers.detach().item(),
         f'task{task_id}/loss/kl_u': kl_u.detach().item(),
         f'task{task_id}/loss/kl_u_lt': kl_u_lt.detach().item(),
+        f'task{task_id}/loss/kl_pf': kl_pf.detach().item(),
         f'task{task_id}/loss/lik': lik.detach().item()
       }
 

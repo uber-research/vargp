@@ -89,7 +89,7 @@ class VARGPRetrain(nn.Module):
 
     return mu_lt, S_lt, \
            mu_leq_t, S_leq_t, \
-           z_leq_t
+           z_lt, z_leq_t
 
   def compute_pf_diag(self, theta, x, mu_leq_t, S_leq_t, z_leq_t, cache=None):
     '''
@@ -131,13 +131,12 @@ class VARGPRetrain(nn.Module):
     theta = self.kernel.sample_hypers(self.n_v)
 
     if self.prev_params:
-      cache_q, cache_q_tilde = dict(), dict()
+      cache_q = dict()
+      cache_pf = dict()
 
-      mu_lt, S_lt, *_ = self.compute_q(theta, self.retrain_params, cache=cache_q)
+      mu_lt, S_lt, mu_leq_t, S_leq_t, _, z_leq_t = self.compute_q(theta, self.retrain_params, cache=cache_q)
 
-      mu_lt_tilde, S_lt_tilde, mu_leq_t_tilde, S_leq_t_tilde, z_leq_t_tilde = self.compute_q(theta, self.prev_params, cache=cache_q_tilde)
-
-      pred_mu, pred_var = self.compute_pf_diag(theta, x, mu_leq_t_tilde, S_leq_t_tilde, z_leq_t_tilde)
+      pred_mu, pred_var = self.compute_pf_diag(theta, x, mu_leq_t, S_leq_t, z_leq_t, cache=cache_pf)
 
       if isinstance(loss_cache, dict):
         q_lt = dist.MultivariateNormal(mu_lt.squeeze(-1), covariance_matrix=S_lt)
@@ -155,14 +154,43 @@ class VARGPRetrain(nn.Module):
         var_mu_t = var_mu_t + self.u_mean.unsqueeze(0).unsqueeze(0)
         var_L_cov_t = vec2tril(self.u_tril_vec, self.M).unsqueeze(0).unsqueeze(0)
 
+        cache_q_tilde = dict()
+        mu_lt_tilde, S_lt_tilde, mu_leq_t_tilde, S_leq_t_tilde, z_lt_tilde, z_leq_t_tilde = self.compute_q(theta, self.prev_params, cache=cache_q_tilde)
+
         ## Compute p(u_t | \tilde{u}_{<t}, \theta)
-        Lz = cache_q_tilde.pop('Lz_lt')#.unsqueeze(0)
-        Lz_Kzx = cache_q_tilde.pop('Lz_lt_Kz_lt_z_t')#.unsqueeze(0).expand(self.n_v, *([-1] * (Lz.dim() - 1)))
+        Lz = cache_q_tilde.pop('Lz_lt')
+        Lz_Kzx = cache_q_tilde.pop('Lz_lt_Kz_lt_z_t')
         prior_mu_t, prior_cov_t = gp_cond(mu_lt_tilde, None, None, Kzz, Lz=Lz, Lz_Kzx=Lz_Kzx)
         prior_mu_t = prior_mu_t.unsqueeze(0)
 
+        q_leq_t = dist.MultivariateNormal(mu_leq_t.squeeze(-1), covariance_matrix=S_leq_t)
+        u_leq_t = q_leq_t.rsample(torch.Size([self.n_v])).unsqueeze(-1)
+
+        ## Compute p(f|u_{\leq t}, \theta)
+        Lz = cache_pf.pop('Lz').unsqueeze(0)
+        Lz_Kzx = cache_pf.pop('Lz_Kzx').unsqueeze(0).expand(self.n_v, *([-1] * (Lz.dim() - 1)))
+        xf = x.unsqueeze(0).expand(z_leq_t.size(0), -1, -1)
+        Kxx = self.kernel.compute(theta, xf)
+
+        f_mu, f_cov = gp_cond(u_leq_t, None, None, Kxx, Lz=Lz, Lz_Kzx=Lz_Kzx)
+        f_mu = f_mu.squeeze(-1)
+        f_cov_diag = f_cov.diagonal(dim1=-2, dim2=-1)
+
+        ## Compute p(f|u_t, \tilde{u}_{<t}, \theta)
+        u_leq_tilde = torch.cat([
+          mu_leq_t_tilde[..., :-self.M, :].unsqueeze(0).expand(u_leq_t.size(0), -1, -1, -1, -1),
+          u_leq_t[..., -self.M:, :]
+        ], dim=-2)
+        Kzz = self.kernel.compute(theta, z_leq_t_tilde).unsqueeze(0)
+        Kzx = self.kernel.compute(theta, z_leq_t_tilde, xf).unsqueeze(0).expand(self.n_v, -1, -1, -1, -1)
+
+        f_mu_tilde, f_cov_tilde = gp_cond(u_leq_tilde, Kzz, Kzx, Kxx.unsqueeze(0))
+        f_mu_tilde = f_mu.squeeze(-1)
+        f_cov_tilde_diag = f_cov.diagonal(dim1=-2, dim2=-1)
+
         loss_cache.update(dict(var_mu_t=var_mu_t.squeeze(-1), var_L_cov_t=var_L_cov_t,
                                var_m_lt=mu_lt.squeeze(-1), var_S_lt=S_lt, var_m_lt_tilde=mu_lt_tilde.squeeze(-1), var_S_lt_tilde=S_lt_tilde,
+                               f_mu=f_mu, f_cov_diag=f_cov_diag, f_mu_tilde=f_mu_tilde, f_cov_tilde_diag=f_cov_tilde_diag,
                                prior_mu_t=prior_mu_t.squeeze(-1), prior_L_cov_t=cholesky(prior_cov_t)))
     else:
       cache_pf = dict()
@@ -202,6 +230,13 @@ class VARGPRetrain(nn.Module):
       )
       kl_u_lt = kl_divergence(q_lt, q_lt_tilde).sum(dim=-1).mean(dim=0)
 
+    kl_pf = torch.tensor(0.0, device=x.device)
+    if 'f_mu' in loss_cache:
+      p_f = dist.Normal(loss_cache.pop('f_mu'), loss_cache.pop('f_cov_diag').sqrt())
+      p_f_tilde = dist.Normal(loss_cache.pop('f_mu_tilde'), loss_cache.pop('f_cov_tilde_diag').sqrt())
+
+      kl_pf = kl_divergence(p_f, p_f_tilde).sum(dim=-1).sum(dim=-1).mean(dim=-1).mean(dim=-1)
+
     var_dist = dist.MultivariateNormal(
       loss_cache.pop('var_mu_t'),
       scale_tril=loss_cache.pop('var_L_cov_t'))
@@ -214,7 +249,7 @@ class VARGPRetrain(nn.Module):
 
     kl_hypers = self.kernel.kl_hypers()
 
-    return kl_hypers, kl_u, kl_u_lt, nll
+    return kl_hypers, kl_u, kl_u_lt, kl_pf, nll
 
   def predict(self, x):
     pred_mu, pred_var = self(x)
