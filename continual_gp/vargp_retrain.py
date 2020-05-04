@@ -139,59 +139,34 @@ class VARGPRetrain(nn.Module):
       pred_mu, pred_var = self.compute_pf_diag(theta, x, mu_leq_t, S_leq_t, z_leq_t, cache=cache_pf)
 
       if isinstance(loss_cache, dict):
-        q_lt = dist.MultivariateNormal(mu_lt.squeeze(-1), covariance_matrix=S_lt)
-        u_lt = q_lt.rsample(torch.Size([self.n_v])).unsqueeze(-1)
-        # u_lt = mu_lt.unsqueeze(0)
+        ## Compute p(u_{\leq t} | \theta)
+        prior_mu_leq_t = torch.zeros_like(mu_leq_t)
+        prior_S_leq_t = self.kernel.compute(theta, z_leq_t)
 
-        if u_lt.dim() == 4:
-          u_lt = u_lt.unsqueeze(1)
+        ## Compute q(\tilde{u}_{< t} | \theta)
+        mu_lt_tilde, S_lt_tilde, *_, z_lt_tilde, _ = self.compute_q(theta, self.prev_params)
 
-        ## Compute q(u_t | u_{<t}, \theta)
-        Lz = cache_q.pop('Lz_lt').unsqueeze(0)
-        Lz_Kzx = cache_q.pop('Lz_lt_Kz_lt_z_t').unsqueeze(0).expand(self.n_v, *([-1] * (Lz.dim() - 1)))
-        Kzz = self.kernel.compute(theta, self.z).unsqueeze(0)
-        var_mu_t, _ = gp_cond(u_lt, None, None, Kzz, Lz=Lz, Lz_Kzx=Lz_Kzx)
-        var_mu_t = var_mu_t + self.u_mean.unsqueeze(0).unsqueeze(0)
-        var_L_cov_t = vec2tril(self.u_tril_vec, self.M).unsqueeze(0).unsqueeze(0)
+        ## Compute p(\tilde{u}_{< t} | \theta)
+        prior_mu_lt_tilde = torch.zeros_like(mu_lt_tilde)
+        prior_S_lt_tilde = self.kernel.compute(theta, z_lt_tilde)
 
-        cache_q_tilde = dict()
-        mu_lt_tilde, S_lt_tilde, mu_leq_t_tilde, S_leq_t_tilde, z_lt_tilde, z_leq_t_tilde = self.compute_q(theta, self.prev_params, cache=cache_q_tilde)
+        ## Compute samples \tilde{u}_{< t}  from q(u_{\leq t} | \theta) p(\tilde{u}_{< t} | u_{\leq t}, \theta)
+        q_leq_t = dist.MultivariateNormal(mu_leq_t.squeeze(-1), scale_tril=cholesky(S_leq_t))
+        u_leq_t = q_leq_t.sample(torch.Size([self.n_v])).unsqueeze(-1)
 
-        ## Compute p(u_t | \tilde{u}_{<t}, \theta)
-        Lz = cache_q_tilde.pop('Lz_lt')
-        Lz_Kzx = cache_q_tilde.pop('Lz_lt_Kz_lt_z_t')
-        prior_mu_t, prior_cov_t = gp_cond(mu_lt_tilde, None, None, Kzz, Lz=Lz, Lz_Kzx=Lz_Kzx)
-        prior_mu_t = prior_mu_t.unsqueeze(0)
+        Kzz = self.kernel.compute(theta, z_leq_t).unsqueeze(0).expand(self.n_v, -1, -1, -1, -1)
+        Kzx = self.kernel.compute(theta, z_leq_t, z_lt_tilde).unsqueeze(0).expand(self.n_v, -1, -1, -1, -1)
+        Kxx = self.kernel.compute(theta, z_lt_tilde).unsqueeze(0).expand(self.n_v, -1, -1, -1, -1)
+        p_mu_lt_tilde, p_S_lt_tilde = gp_cond(u_leq_t, Kzz, Kzx, Kxx)
+        p_lt_tilde = dist.MultivariateNormal(p_mu_lt_tilde.squeeze(-1), scale_tril=cholesky(p_S_lt_tilde))
 
-        q_leq_t = dist.MultivariateNormal(mu_leq_t.squeeze(-1), covariance_matrix=S_leq_t)
-        u_leq_t = q_leq_t.rsample(torch.Size([self.n_v])).unsqueeze(-1)
+        u_lt_tilde = p_lt_tilde.sample(torch.Size([self.n_v]))
 
-        ## Compute p(f|u_{\leq t}, \theta)
-        Lz = cache_pf.pop('Lz').unsqueeze(0)
-        Lz_Kzx = cache_pf.pop('Lz_Kzx').unsqueeze(0).expand(self.n_v, *([-1] * (Lz.dim() - 1)))
-        xf = x.unsqueeze(0).expand(z_leq_t.size(0), -1, -1)
-        Kxx = self.kernel.compute(theta, xf)
-
-        f_mu, f_cov = gp_cond(u_leq_t, None, None, Kxx, Lz=Lz, Lz_Kzx=Lz_Kzx)
-        f_mu = f_mu.squeeze(-1)
-        f_cov_diag = f_cov.diagonal(dim1=-2, dim2=-1)
-
-        ## Compute p(f|u_t, \tilde{u}_{<t}, \theta)
-        u_leq_tilde = torch.cat([
-          mu_leq_t_tilde[..., :-self.M, :].unsqueeze(0).expand(u_leq_t.size(0), -1, -1, -1, -1),
-          u_leq_t[..., -self.M:, :]
-        ], dim=-2)
-        Kzz = self.kernel.compute(theta, z_leq_t_tilde).unsqueeze(0)
-        Kzx = self.kernel.compute(theta, z_leq_t_tilde, xf).unsqueeze(0).expand(self.n_v, -1, -1, -1, -1)
-
-        f_mu_tilde, f_cov_tilde = gp_cond(u_leq_tilde, Kzz, Kzx, Kxx.unsqueeze(0))
-        f_mu_tilde = f_mu.squeeze(-1)
-        f_cov_tilde_diag = f_cov.diagonal(dim1=-2, dim2=-1)
-
-        loss_cache.update(dict(var_mu_t=var_mu_t.squeeze(-1), var_L_cov_t=var_L_cov_t,
-                               var_m_lt=mu_lt.squeeze(-1), var_S_lt=S_lt, var_m_lt_tilde=mu_lt_tilde.squeeze(-1), var_S_lt_tilde=S_lt_tilde,
-                               f_mu=f_mu, f_cov_diag=f_cov_diag, f_mu_tilde=f_mu_tilde, f_cov_tilde_diag=f_cov_tilde_diag,
-                               prior_mu_t=prior_mu_t.squeeze(-1), prior_L_cov_t=cholesky(prior_cov_t)))
+        loss_cache.update(dict(var_mu_leq_t=mu_leq_t.squeeze(-1), var_L_leq_t=cholesky(S_leq_t),
+                               prior_mu_leq_t=prior_mu_leq_t.squeeze(-1), prior_L_leq_t=cholesky(prior_S_leq_t),
+                               var_mu_lt_tilde=mu_lt_tilde.squeeze(-1), var_L_lt_tilde=cholesky(S_lt_tilde),
+                               prior_mu_lt_tilde=prior_mu_lt_tilde.squeeze(-1), prior_L_lt_tilde=cholesky(prior_S_lt_tilde),
+                               u_lt_tilde=u_lt_tilde))
     else:
       cache_pf = dict()
 
@@ -218,38 +193,44 @@ class VARGPRetrain(nn.Module):
     pred_mu, pred_var = self(x, loss_cache=loss_cache)
     nll = self.likelihood.loss(pred_mu, pred_var, y)
 
-    kl_u_lt = torch.tensor(0.0, device=x.device)
-    if 'var_m_lt' in loss_cache:
-      q_lt = dist.MultivariateNormal(
-        loss_cache.pop('var_m_lt'),
-        covariance_matrix=loss_cache.pop('var_S_lt')
-      )
+    kl_u = torch.tensor(0.0, device=x.device)
+    if self.prev_params:
+      q_leq_t = dist.MultivariateNormal(
+        loss_cache.pop('var_mu_leq_t'),
+        scale_tril=loss_cache.pop('var_L_leq_t'))
+
+      p_leq_t = dist.MultivariateNormal(
+        loss_cache.pop('prior_mu_leq_t'),
+        scale_tril=loss_cache.pop('prior_L_leq_t'))
+
+      kl_u = kl_divergence(q_leq_t, p_leq_t).sum(dim=-1).mean(dim=0)
+
       q_lt_tilde = dist.MultivariateNormal(
-        loss_cache.pop('var_m_lt_tilde'),
-        covariance_matrix=loss_cache.pop('var_S_lt_tilde')
-      )
-      kl_u_lt = kl_divergence(q_lt, q_lt_tilde).sum(dim=-1).mean(dim=0)
+        loss_cache.pop('var_mu_lt_tilde'),
+        scale_tril=loss_cache.pop('var_L_lt_tilde'))
 
-    kl_pf = torch.tensor(0.0, device=x.device)
-    if 'f_mu' in loss_cache:
-      p_f = dist.Normal(loss_cache.pop('f_mu'), loss_cache.pop('f_cov_diag').sqrt())
-      p_f_tilde = dist.Normal(loss_cache.pop('f_mu_tilde'), loss_cache.pop('f_cov_tilde_diag').sqrt())
+      p_lt_tilde = dist.MultivariateNormal(
+        loss_cache.pop('prior_mu_lt_tilde'),
+        scale_tril=loss_cache.pop('prior_L_lt_tilde'))
 
-      kl_pf = kl_divergence(p_f, p_f_tilde).sum(dim=-1).sum(dim=-1).mean(dim=-1).mean(dim=-1)
+      u_lt_tilde = loss_cache.pop('u_lt_tilde')
+      tilde_ratio = (p_lt_tilde.log_prob(u_lt_tilde) - q_lt_tilde.log_prob(u_lt_tilde)).sum(dim=-1).mean(dim=-1).mean(dim=-1).mean(dim=-1)
 
-    var_dist = dist.MultivariateNormal(
-      loss_cache.pop('var_mu_t'),
-      scale_tril=loss_cache.pop('var_L_cov_t'))
+      kl_u = kl_u + tilde_ratio
+    else:
+      var_dist = dist.MultivariateNormal(
+        loss_cache.pop('var_mu_t'),
+        scale_tril=loss_cache.pop('var_L_cov_t'))
 
-    prior_dist = dist.MultivariateNormal(
-      loss_cache.pop('prior_mu_t'),
-      scale_tril=loss_cache.pop('prior_L_cov_t'))
+      prior_dist = dist.MultivariateNormal(
+        loss_cache.pop('prior_mu_t'),
+        scale_tril=loss_cache.pop('prior_L_cov_t'))
 
-    kl_u = kl_divergence(var_dist, prior_dist).sum(dim=-1).mean(dim=0).mean(dim=0)
+      kl_u = kl_divergence(var_dist, prior_dist).sum(dim=-1).mean(dim=0).mean(dim=0)
 
     kl_hypers = self.kernel.kl_hypers()
 
-    return kl_hypers, kl_u, kl_u_lt, kl_pf, nll
+    return kl_hypers, kl_u, nll
 
   def predict(self, x):
     pred_mu, pred_var = self(x)

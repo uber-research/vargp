@@ -49,7 +49,7 @@ def vec2tril(vec, m=None):
   return tril
 
 
-def gp_cond(u, Kzz, Kzx, Kxx, Lz=None, Lz_Kzx=None):
+def gp_cond(u, Kzz, Kzx, Kxx):
   '''
   Compute the GP predictive conditional
   p(f|u,x,z)
@@ -67,13 +67,11 @@ def gp_cond(u, Kzz, Kzx, Kxx, Lz=None, Lz_Kzx=None):
     μ: ... x N x 1
     Σ: ... x N x N
   '''
-  if Lz is None:
-    Lz = cholesky(Kzz)
+  Lz = cholesky(Kzz)
 
   Lz_u, _ = torch.triangular_solve(u, Lz, upper=False)
 
-  if Lz_Kzx is None:
-    Lz_Kzx, _ = torch.triangular_solve(Kzx, Lz, upper=False)
+  Lz_Kzx, _ = torch.triangular_solve(Kzx, Lz, upper=False)
 
   μ = torch.einsum('...ij,...ik->...jk', Lz_Kzx, Lz_u)
 
@@ -85,9 +83,9 @@ def gp_cond(u, Kzz, Kzx, Kxx, Lz=None, Lz_Kzx=None):
 def linear_joint(m, S, Kzx, Kzz, V, b, cache=None):
   '''
   Compute product of Gaussian densities of the form
-  p(x,y) = N(x; m, S)N(y; Ax + b, V) where A = Kxz Kzz_inv.
+  p(z,x) = N(z; m, S)N(x; Az + b, V) where A = Kxz Kzz_inv.
 
-  Results in N([x,y]; μ, Σ) where
+  Results in N([z,x]; μ, Σ) where
   μ = [m, Am + b]
   Σ = [S, SA^T; AS, V + ASA^T]
 
@@ -135,7 +133,7 @@ def linear_marginal_diag(m, S, Kzz, Kzx, Kxx_diag, cache=None):
   '''
   Compute the diagonal of the marginal of
   product of Gaussian densities of the form
-  p(x,y) = N(x; m, S)N(y; Ax, V) where A = Kxz Kzz_inv.
+  p(z,x) = N(z; m, S)N(y; Az, V) where A = Kxz Kzz_inv.
 
   This function combines `gp_cond`, `linear_joint`
   and diagonalization into a single efficient function.

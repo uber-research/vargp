@@ -29,9 +29,9 @@ def train(task_id, train_set, val_set, test_set, ep_var_mean=True, map_est_hyper
     for x, y in tqdm(loader, leave=False):
       optim.zero_grad()
 
-      kl_hypers, kl_u, kl_u_lt, kl_pf, lik = gp.loss(x.to(device), y.to(device))
+      kl_hypers, kl_u, lik = gp.loss(x.to(device), y.to(device))
 
-      loss = beta * kl_hypers + kl_u + kl_u_lt + kl_pf + (N / x.size(0)) * lik
+      loss = beta * kl_hypers + kl_u + (N / x.size(0)) * lik
       loss.backward()
 
       optim.step()
@@ -44,8 +44,6 @@ def train(task_id, train_set, val_set, test_set, ep_var_mean=True, map_est_hyper
       loss_summary = {
         f'task{task_id}/loss/kl_hypers': kl_hypers.detach().item(),
         f'task{task_id}/loss/kl_u': kl_u.detach().item(),
-        f'task{task_id}/loss/kl_u_lt': kl_u_lt.detach().item(),
-        f'task{task_id}/loss/kl_pf': kl_pf.detach().item(),
         f'task{task_id}/loss/lik': lik.detach().item()
       }
 
@@ -100,6 +98,7 @@ def toy(data_dir='/tmp', epochs=5000, M=20, lr=1e-2,
                        ep_var_mean=bool(ep_var_mean), map_est_hypers=bool(map_est_hypers),
                        prev_params=prev_params, logger=logger, device=device, patience=-1)
 
+    ## TODO(sanyam): Handle new format for state_dict.
     prev_params.append(state_dict)
 
   logger.close()
