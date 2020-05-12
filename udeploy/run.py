@@ -3,7 +3,6 @@ import glob
 import subprocess
 import time
 import logging
-from kondo.utils import to_argv
 
 
 def wb_sweep(project, sweep_id):

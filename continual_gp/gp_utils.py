@@ -49,7 +49,7 @@ def vec2tril(vec, m=None):
   return tril
 
 
-def gp_cond(u, Kzz, Kzx, Kxx):
+def gp_cond(u, Kzz, Kzx, Kxx, Lz=None, Lz_Kzx=None):
   '''
   Compute the GP predictive conditional
   p(f|u,x,z)
@@ -67,11 +67,13 @@ def gp_cond(u, Kzz, Kzx, Kxx):
     μ: ... x N x 1
     Σ: ... x N x N
   '''
-  Lz = cholesky(Kzz)
+  if Lz is None:
+    Lz = cholesky(Kzz)
 
   Lz_u, _ = torch.triangular_solve(u, Lz, upper=False)
 
-  Lz_Kzx, _ = torch.triangular_solve(Kzx, Lz, upper=False)
+  if Lz_Kzx is None:
+    Lz_Kzx, _ = torch.triangular_solve(Kzx, Lz, upper=False)
 
   μ = torch.einsum('...ij,...ik->...jk', Lz_Kzx, Lz_u)
 
