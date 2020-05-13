@@ -28,7 +28,7 @@ class RBFKernel(nn.Module):
         in case x = y.
 
         Arguments:
-            kern_samples: n_hypers x 3
+            kern_samples: n_hypers x (in_size + 1)
             x: ...batches x M x D
             y: ...batches x N x D, if None, assumed equals x
 
@@ -75,3 +75,22 @@ class RBFKernel(nn.Module):
         prior_dist = dist.Normal(self.prior_log_mean, self.prior_log_logvar.exp().sqrt())
         total_kl = kl_divergence(var_dist, prior_dist).sum(dim=0)
         return total_kl
+
+
+class DeepRBFKernel(RBFKernel):
+    def __init__(self, in_size, feature_size=64, **kwargs):
+        super().__init__(feature_size, **kwargs)
+
+        self.phi = nn.Sequential(
+            nn.Linear(in_size, 256),
+            nn.ReLU(),
+            nn.Linear(256, 256),
+            nn.ReLU(),
+            nn.Linear(256, feature_size),
+        )
+
+    def compute(self, kern_samples, x, y=None):
+        x = self.phi(x)
+        if y is not None:
+            y = self.phi(y)
+        return super().compute(kern_samples, x, y=y)

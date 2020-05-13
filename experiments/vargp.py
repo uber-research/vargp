@@ -11,11 +11,11 @@ from continual_gp.train_utils import set_seeds, EarlyStopper, compute_accuracy
 from continual_gp.vargp import VARGP
 
 
-def train(task_id, train_set, val_set, test_set, ep_var_mean=True, map_est_hypers=False,
+def train(task_id, train_set, val_set, test_set, ep_var_mean=True, map_est_hypers=False, dkl=False,
           epochs=1, M=20, n_f=10, n_var_samples=3, batch_size=512, lr=1e-2, beta=1.0,
           eval_interval=10, patience=20, prev_params=None, logger=None, device=None):
   gp = VARGP.create_clf(train_set, M=M, n_f=n_f, n_var_samples=n_var_samples, prev_params=prev_params,
-                        ep_var_mean=ep_var_mean, map_est_hypers=map_est_hypers).to(device)
+                        ep_var_mean=ep_var_mean, map_est_hypers=map_est_hypers, dkl=dkl).to(device)
 
   stopper = EarlyStopper(patience=patience)
 
@@ -75,7 +75,7 @@ def train(task_id, train_set, val_set, test_set, ep_var_mean=True, map_est_hyper
 
 def toy(data_dir='/tmp', epochs=5000, M=20, lr=1e-2,
         batch_size=512, beta=1.0, ep_var_mean=True, map_est_hypers=False,
-        seed=None):
+        dkl=False, seed=None):
   set_seeds(seed)
 
   wandb.init(tensorboard=True)
@@ -95,7 +95,7 @@ def toy(data_dir='/tmp', epochs=5000, M=20, lr=1e-2,
 
     state_dict = train(t, toy_train, toy_val, toy_test,
                        epochs=epochs, M=M, lr=lr, beta=beta, batch_size=batch_size,
-                       ep_var_mean=bool(ep_var_mean), map_est_hypers=bool(map_est_hypers),
+                       ep_var_mean=bool(ep_var_mean), map_est_hypers=bool(map_est_hypers), dkl=bool(dkl),
                        prev_params=prev_params, logger=logger, device=device, patience=-1)
 
     prev_params.append(state_dict)
@@ -105,7 +105,7 @@ def toy(data_dir='/tmp', epochs=5000, M=20, lr=1e-2,
 
 def split_mnist(data_dir='/tmp', epochs=500, M=60, lr=3e-3,
                 batch_size=512, beta=10.0, ep_var_mean=True, map_est_hypers=False,
-                seed=None):
+                dkl=False, seed=None):
   set_seeds(seed)
 
   wandb.init(tensorboard=True)
@@ -130,7 +130,7 @@ def split_mnist(data_dir='/tmp', epochs=500, M=60, lr=3e-3,
 
     state_dict = train(t, mnist_train, mnist_val, mnist_test,
                        epochs=epochs, M=M, lr=lr, beta=beta, batch_size=batch_size,
-                       ep_var_mean=bool(ep_var_mean), map_est_hypers=bool(map_est_hypers),
+                       ep_var_mean=bool(ep_var_mean), map_est_hypers=bool(map_est_hypers), dkl=bool(dkl),
                        prev_params=prev_params, logger=logger, device=device)
 
     prev_params.append(state_dict)
@@ -140,7 +140,7 @@ def split_mnist(data_dir='/tmp', epochs=500, M=60, lr=3e-3,
 
 def permuted_mnist(data_dir='/tmp', n_tasks=10, epochs=1000, M=100, lr=3.7e-3,
                    batch_size=512, beta=1.64, ep_var_mean=True, map_est_hypers=False,
-                   seed=None):
+                   dkl=False, seed=None):
   set_seeds(seed)
 
   wandb.init(tensorboard=True)
@@ -175,7 +175,7 @@ def permuted_mnist(data_dir='/tmp', n_tasks=10, epochs=1000, M=100, lr=3.7e-3,
 
     state_dict = train(t, mnist_train, ConcatDataset(mnist_val), ConcatDataset(mnist_test),
                        epochs=epochs, M=M, lr=lr, beta=beta, batch_size=batch_size,
-                       ep_var_mean=bool(ep_var_mean), map_est_hypers=bool(map_est_hypers),
+                       ep_var_mean=bool(ep_var_mean), map_est_hypers=bool(map_est_hypers), dkl=bool(dkl),
                        prev_params=prev_params, logger=logger, device=device)
 
     prev_params.append(state_dict)

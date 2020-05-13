@@ -4,7 +4,7 @@ import torch.distributions as dist
 from torch.distributions.kl import kl_divergence
 
 from .gp_utils import vec2tril, cholesky, rev_cholesky, gp_cond, linear_joint, linear_marginal_diag
-from .kernels import RBFKernel
+from .kernels import RBFKernel, DeepRBFKernel
 from .likelihoods import MulticlassSoftmax
 
 
@@ -198,7 +198,7 @@ class VARGP(nn.Module):
 
   @staticmethod
   def create_clf(dataset, M=20, n_f=10, n_var_samples=3, prev_params=None,
-                 ep_var_mean=True, map_est_hypers=False):
+                 ep_var_mean=True, map_est_hypers=False, dkl=False):
     N = len(dataset)
     out_size = torch.unique(dataset.targets).size(0)
 
@@ -208,9 +208,16 @@ class VARGP(nn.Module):
       for _ in range(out_size)])
 
     prior_log_mean, prior_log_logvar = None, None
+    phi_params = None
+
     if prev_params:
+      ## Init kernel hyperprior to last timestep.
       prior_log_mean = prev_params[-1].get('kernel.log_mean')
       prior_log_logvar = prev_params[-1].get('kernel.log_logvar')
+
+      ## Init kernel NN to last timestep if available.
+      if dkl:
+        phi_params = {k[11:]: v for k, v in prev_params[-1].items() if k.startswith('kernel.phi.')}
 
       def process(p):
         for k in list(p.keys()):
@@ -220,8 +227,15 @@ class VARGP(nn.Module):
 
       prev_params = [process(p) for p in prev_params]
 
-    kernel = RBFKernel(z.size(-1), prior_log_mean=prior_log_mean,
-                       prior_log_logvar=prior_log_logvar, map_est=map_est_hypers)
+    if dkl:
+      kernel = DeepRBFKernel(z.size(-1), prior_log_mean=prior_log_mean,
+                             prior_log_logvar=prior_log_logvar, map_est=map_est_hypers)
+      if phi_params is not None:
+        kernel.phi.load_state_dict(phi_params)
+    else:
+      kernel = RBFKernel(z.size(-1), prior_log_mean=prior_log_mean,
+                         prior_log_logvar=prior_log_logvar, map_est=map_est_hypers)
+
     likelihood = MulticlassSoftmax(n_f=n_f)
     gp = VARGP(z, kernel, likelihood, n_var_samples=n_var_samples,
                ep_var_mean=ep_var_mean, prev_params=prev_params)
