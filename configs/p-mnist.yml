@@ -1,13 +1,13 @@
 method: random
 parameters:
   n_tasks:
-    value: 5
+    value: 10
   epochs:
-    value: 1000
+    value: 500
   M:
-    values: [40, 60, 80, 100, 120, 140, 160, 180, 200]
+    value: 100
   lr:
-    value: 0.0037
+    value: 0.003
   batch_size:
     value: 512
   beta:
