@@ -4,12 +4,9 @@ import wandb
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-import sys
-sys.path.append("../")
-
-from continual_gp.datasets import ToyDataset
-from continual_gp.train_utils import set_seeds
-from continual_gp.train_utils_global import train
+from var_gp.datasets import ToyDataset
+from var_gp.train_utils import set_seeds
+from var_gp.train_utils_global import train
 
 
 def main(data_dir='/tmp', epochs=10000, M=20, lr=1e-2,

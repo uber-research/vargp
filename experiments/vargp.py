@@ -6,9 +6,9 @@ from torch.utils.data import DataLoader, ConcatDataset
 from torch.utils.tensorboard import SummaryWriter
 import torch_optimizer
 
-from continual_gp.datasets import ToyDataset, SplitMNIST, PermutedMNIST
-from continual_gp.train_utils import set_seeds, EarlyStopper, compute_accuracy
-from continual_gp.vargp import VARGP
+from var_gp.datasets import ToyDataset, SplitMNIST, PermutedMNIST
+from var_gp.train_utils import set_seeds, EarlyStopper, compute_accuracy
+from var_gp.vargp import VARGP
 
 
 def train(task_id, train_set, val_set, test_set, ep_var_mean=True, map_est_hypers=False, dkl=False,

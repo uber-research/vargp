@@ -142,3 +142,4 @@ env/
 
 # Weights & Biases
 wandb/
+configs/

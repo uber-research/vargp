@@ -5,9 +5,9 @@ import torch
 from torch.utils.data import DataLoader, ConcatDataset
 from torch.utils.tensorboard import SummaryWriter
 
-from continual_gp.datasets import SplitMNIST, PermutedMNIST
-from continual_gp.train_utils import set_seeds
-from continual_gp.train_utils_global import train
+from var_gp.datasets import SplitMNIST, PermutedMNIST
+from var_gp.train_utils import set_seeds
+from var_gp.train_utils_global import train
 
 
 def split_mnist(data_dir='/tmp', epochs=500, M=60, lr=3e-3,

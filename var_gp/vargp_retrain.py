@@ -248,7 +248,7 @@ class VARGPRetrain(nn.Module):
 
     prior_log_mean, prior_log_logvar = None, None
 
-    ## TODO(sanyam): Need to handle all the new param structure for T>2.
+    ## TODO: Need to handle all the new param structure for T>2?
     if prev_params:
       prior_log_mean = prev_params[-1].get('kernel.log_mean')
       prior_log_logvar = prev_params[-1].get('kernel.log_logvar')

@@ -6,9 +6,9 @@ from torch.utils.data import DataLoader, ConcatDataset
 from torch.utils.tensorboard import SummaryWriter
 import torch_optimizer
 
-from continual_gp.datasets import ToyDataset
-from continual_gp.train_utils import set_seeds, EarlyStopper, compute_accuracy
-from continual_gp.vargp_retrain import VARGPRetrain
+from var_gp.datasets import ToyDataset
+from var_gp.train_utils import set_seeds, EarlyStopper, compute_accuracy
+from var_gp.vargp_retrain import VARGPRetrain
 
 
 def train(task_id, train_set, val_set, test_set, ep_var_mean=True, map_est_hypers=False,
@@ -98,7 +98,7 @@ def toy(data_dir='/tmp', epochs=5000, M=20, lr=1e-2,
                        ep_var_mean=bool(ep_var_mean), map_est_hypers=bool(map_est_hypers),
                        prev_params=prev_params, logger=logger, device=device, patience=-1)
 
-    ## TODO(sanyam): Handle new format for state_dict.
+    ## TODO: Handle new format for state_dict?
     prev_params.append(state_dict)
 
   logger.close()
