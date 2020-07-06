@@ -52,7 +52,15 @@ python experiments/vargp.py p-mnist
 
 ### Checkpoints and Graphs
 
-The checkpoints files can be downloaded [here](https://bit.ly/var-gp-results). Extract
+The checkpoints files can be downloaded [here](https://data.perhapsbay.es/research/var-gp_2020_results.zip). Extract
 contents of the zip file into `notebooks/results`.
 
 All graphs in the paper can now be generated via code in the notebooks.
+
+## Acknowledgements
+
+SK was supported by the Uber AI Residency program.
+
+## License
+
+Apache 2.0
