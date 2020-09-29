@@ -13,6 +13,6 @@ dependencies:
     - fire
     - tensorboard
     - wandb
-    - 'torch<1.5'
-    - 'torchvision<0.6'
+    - torch
+    - torchvision
     - torch_optimizer

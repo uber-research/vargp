@@ -49,6 +49,22 @@ def vec2tril(vec, m=None):
   return tril
 
 
+def mat2trilvec(mat):
+  '''
+  Arguments:
+    mat: K x m x m
+
+  Returns:
+    Batch of flattened triangular matrices
+
+    tril_vec: K x ((m * (m + 1)) // 2)
+  '''
+  m = mat.size(-1)
+  idx = torch.tril_indices(m, m)
+  tril_vec = mat[..., idx[0], idx[1]]
+  return tril_vec
+
+
 def gp_cond(u, Kzz, Kzx, Kxx, Lz=None, Lz_Kzx=None):
   '''
   Compute the GP predictive conditional

@@ -40,7 +40,7 @@ def main(data_dir='/tmp', epochs=10000, M=20, lr=1e-2,
 
 
 if __name__ == "__main__":
-  os.environ['WANDB_MODE'] = 'run' if os.environ.get('IS_UBUILD') else 'dryrun'
+  os.environ['WANDB_MODE'] = os.environ.get('WANDB_MODE', default='dryrun')
 
   import fire
   fire.Fire(main)

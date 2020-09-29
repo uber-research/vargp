@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.distributions as dist
 from torch.distributions.kl import kl_divergence
 
-from .gp_utils import vec2tril, cholesky, rev_cholesky, gp_cond, linear_joint, linear_marginal_diag
+from .gp_utils import vec2tril, mat2trilvec, cholesky, rev_cholesky, gp_cond, linear_joint, linear_marginal_diag
 from .kernels import RBFKernel, DeepRBFKernel
 from .likelihoods import MulticlassSoftmax
 
@@ -29,7 +29,8 @@ class VARGP(nn.Module):
 
     out_size = self.z.size(0)
     self.u_mean = nn.Parameter(torch.Tensor(out_size, self.M, 1).normal_(0., .5))
-    self.u_tril_vec = nn.Parameter(torch.ones(out_size, (self.M * (self.M + 1)) // 2))
+    self.u_tril_vec = nn.Parameter(
+      mat2trilvec(torch.eye(self.M).unsqueeze(0).expand(out_size, -1, -1)))
 
   def compute_q(self, theta, cache=None):
     '''

@@ -89,7 +89,7 @@ def permuted_mnist(data_dir='/tmp', n_tasks=10, epochs=1000, M=100, lr=3.7e-3,
 
 
 if __name__ == "__main__":
-  os.environ['WANDB_MODE'] = 'run' if os.environ.get('IS_UBUILD') else 'dryrun'
+  os.environ['WANDB_MODE'] = os.environ.get('WANDB_MODE', default='dryrun')
 
   import fire
   fire.Fire(dict(s_mnist=split_mnist, p_mnist=permuted_mnist))
