@@ -5,7 +5,7 @@ from datetime import datetime
 
 def generate_vargp_sweep(project='continual_gp', submit=False,
                          dataset=None, epochs=500, M=60, lr=3e-3, beta=10.0):
-  assert dataset in ['s_mnist']
+  assert dataset in ['s_mnist', 'p_mnist']
 
   md = datetime.now().strftime('%h%d')
   sweep_config = {
@@ -31,7 +31,6 @@ def generate_vargp_sweep(project='continual_gp', submit=False,
       '${interpreter}',
       '${program}',
       dataset,
-      f'--data-dir={os.environ.get("USER_DATADIR", default="/tmp")}',
       '${args}',
     ]
   }

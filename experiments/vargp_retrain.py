@@ -73,9 +73,10 @@ def train(task_id, train_set, val_set, test_set, ep_var_mean=True, map_est_hyper
   return info.get('state_dict')
 
 
-def toy(data_dir='/tmp', epochs=5000, M=20, lr=1e-2,
+def toy(data_dir=None, epochs=5000, M=20, lr=1e-2,
         batch_size=512, beta=1.0, ep_var_mean=True, map_est_hypers=False,
         seed=None):
+  data_dir = data_dir or os.environ.get('USER_DATADIR', default='/tmp')
   set_seeds(seed)
 
   wandb.init(tensorboard=True)

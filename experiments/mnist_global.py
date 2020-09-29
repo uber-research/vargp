@@ -10,9 +10,10 @@ from var_gp.train_utils import set_seeds
 from var_gp.train_utils_global import train
 
 
-def split_mnist(data_dir='/tmp', epochs=500, M=60, lr=3e-3,
+def split_mnist(data_dir=None, epochs=500, M=60, lr=3e-3,
                 batch_size=512, beta=10.0, map_est_hypers=False,
                 seed=None):
+  data_dir = data_dir or os.environ.get('USER_DATADIR', default='/tmp')
   set_seeds(seed)
 
   wandb.init(tensorboard=True)
@@ -45,8 +46,10 @@ def split_mnist(data_dir='/tmp', epochs=500, M=60, lr=3e-3,
   logger.close()
 
 
-def permuted_mnist(data_dir='/tmp', n_tasks=10, epochs=1000, M=100, lr=3.7e-3,
+def permuted_mnist(data_dir=None, n_tasks=10, epochs=1000, M=100, lr=3.7e-3,
                    batch_size=512, beta=1.64, seed=None):
+  data_dir = data_dir or os.environ.get('USER_DATADIR', default='/tmp')
+
   set_seeds(seed)
 
   wandb.init(tensorboard=True)

@@ -9,9 +9,10 @@ from var_gp.train_utils import set_seeds
 from var_gp.train_utils_global import train
 
 
-def main(data_dir='/tmp', epochs=10000, M=20, lr=1e-2,
+def main(data_dir=None, epochs=10000, M=20, lr=1e-2,
          batch_size=512, beta=1.0, map_est_hypers=False,
          seed=None):
+  data_dir = data_dir or os.environ.get('USER_DATADIR', default='/tmp')
   set_seeds(seed)
 
   wandb.init(tensorboard=True)

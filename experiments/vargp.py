@@ -73,9 +73,10 @@ def train(task_id, train_set, val_set, test_set, ep_var_mean=True, map_est_hyper
   return info.get('state_dict')
 
 
-def toy(data_dir='/tmp', epochs=5000, M=20, lr=1e-2,
+def toy(data_dir=None, epochs=5000, M=20, lr=1e-2,
         batch_size=512, beta=1.0, ep_var_mean=True, map_est_hypers=False,
         dkl=False, seed=None):
+  data_dir = data_dir or os.environ.get('USER_DATADIR', default='/tmp')
   set_seeds(seed)
 
   wandb.init(tensorboard=True)
@@ -103,9 +104,10 @@ def toy(data_dir='/tmp', epochs=5000, M=20, lr=1e-2,
   logger.close()
 
 
-def split_mnist(data_dir='/tmp', epochs=500, M=60, lr=3e-3,
+def split_mnist(data_dir=None, epochs=500, M=60, lr=3e-3,
                 batch_size=512, beta=10.0, ep_var_mean=True, map_est_hypers=False,
                 dkl=False, seed=None):
+  data_dir = data_dir or os.environ.get('USER_DATADIR', default='/tmp')
   set_seeds(seed)
 
   wandb.init(tensorboard=True)
@@ -138,9 +140,10 @@ def split_mnist(data_dir='/tmp', epochs=500, M=60, lr=3e-3,
   logger.close()
 
 
-def permuted_mnist(data_dir='/tmp', n_tasks=10, epochs=1000, M=100, lr=3.7e-3,
+def permuted_mnist(data_dir=None, n_tasks=10, epochs=1000, M=100, lr=3.7e-3,
                    batch_size=512, beta=1.64, ep_var_mean=True, map_est_hypers=False,
                    dkl=False, seed=None):
+  data_dir = data_dir or os.environ.get('USER_DATADIR', default='/tmp')
   set_seeds(seed)
 
   wandb.init(tensorboard=True)
