@@ -1,4 +1,5 @@
 import wandb
+import os
 from datetime import datetime
 
 
@@ -30,6 +31,7 @@ def generate_vargp_sweep(project='continual_gp', submit=False,
       '${interpreter}',
       '${program}',
       dataset,
+      f'--data-dir={os.environ.get("USER_DATADIR", default="/tmp")}',
       '${args}',
     ]
   }
