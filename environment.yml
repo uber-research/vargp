@@ -12,7 +12,7 @@ dependencies:
     - tqdm
     - fire
     - tensorboard
-    - wandb
+    - 'wandb<0.10'
     - torch
     - torchvision
     - torch_optimizer

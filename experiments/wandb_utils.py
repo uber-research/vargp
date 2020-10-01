@@ -3,20 +3,22 @@ import os
 from datetime import datetime
 
 
-def generate_vargp_sweep(project='continual_gp', submit=False,
+def generate_vargp_sweep(project='continual_gp', submit=False, method='random',
                          dataset=None, epochs=500, M=60, lr=3e-3, beta=10.0):
   assert dataset in ['s_mnist', 'p_mnist']
 
   md = datetime.now().strftime('%h%d')
+  name = f'[{md}] {dataset}-{method}-{M}-{lr}-{beta}'
+
   sweep_config = {
-    'name': f'[{md}] {dataset}-{M}-{lr}-{beta}',
-    'method': 'random',
+    'name': name,
+    'method': method,
     'parameters': {
       'epochs': {
         'value': epochs
       },
       'M': {
-        'value': M
+        'value': M #[10*i for i in range(2, 21, 2)]
       },
       'lr': {
         'value': lr
