@@ -1,8 +1,5 @@
 # Continual Learning with GPs
 
-This repository hosts code for
-[Variational Auto-Regressive Gaussian Processes for Continual Learning](https://arxiv.org/abs/2006.05468) by [_Sanyam Kapoor_](https://www.sanyamkapoor.com), [_Theofanis Karaletsos_](http://karaletsos.com), [_Thang D. Bui_](https://thangbui.github.io).
-
 ## Setup
 
 From the root of the directory
@@ -52,14 +49,10 @@ python experiments/vargp.py p-mnist
 
 ### Checkpoints and Graphs
 
-The checkpoints files can be downloaded [here](https://u.perhapsbay.es/var-gp-results). Extract
+The checkpoints files can be downloaded [here](https://drive.google.com/file/d/1A0XDcD4egzsCsGUk6EJ7i8fdoODFuNPt/view?usp=sharing). Extract
 contents of the zip file into `notebooks/results`.
 
 All graphs in the paper can now be generated via code in the notebooks.
-
-## Acknowledgements
-
-SK was supported by the Uber AI Residency program.
 
 ## License
 
