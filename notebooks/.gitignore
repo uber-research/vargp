@@ -1,5 +1,2 @@
-# Ignore for now but perhaps commit once finalized.
+# Ignore for now.
 results
-
-# Notebook outputs
-**/*.png
