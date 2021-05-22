@@ -1,4 +1,4 @@
-name: var-gp
+name: vargp
 channels:
   - conda-forge
 dependencies:

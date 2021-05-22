@@ -4,22 +4,10 @@
 [![](https://img.shields.io/badge/ICML-2021-brightgreen)](https://u.perhapsbay.es/vargp)
 
 This repository hosts the code for 
-[_Variational Auto-Regressive Gaussian Processes for Continual Learning_](https://u.perhapsbay.es/vargp-arxiv) 
+[_Variational Auto-Regressive Gaussian Processes for Continual Learning_](https://u.perhapsbay.es/vargp) 
 by [Sanyam Kapoor](https://im.perhapsbay.es), 
 [Theofanis Karaletsos](https://karaletsos.com),
 [Thang D. Bui](https://thangbui.github.io).
-
-If you use VAR-GPs in your work, please use the following citation,
-
-```
-@InProceedings{vargp2020, 
-title={{Variational Auto-Regressive Gaussian Processes for Continual Learning}},
-author={Kapoor, Sanyam and Karaletsos, Theofanis and Bui, Thang D.},
-booktitle={Proceedings of the 38th International Conference on Machine Learning},
-year={2021},
-series={Proceedings of Machine Learning Research}
-}
-```
 
 ## Setup
 
