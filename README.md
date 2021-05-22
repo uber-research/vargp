@@ -58,8 +58,11 @@ python experiments/vargp.py p-mnist
 
 ### Checkpoints and Graphs
 
-The checkpoints files can be downloaded [here](https://u.perhapsbay.es/vargp-results). Extract
-contents of the zip file into `notebooks/results`.
+The checkpoints files are available under [notesbooks/results](./notebooks/results).
+Use [Git LFS](https://git-lfs.github.com) to make sure these are pulled
+alongside the repository.
+
+**TIP**: Use `git lfs fetch` if Git LFS was installed after the first clone.
 
 All graphs in the paper can now be generated via code in the notebooks.
 
