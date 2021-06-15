@@ -1,10 +1,10 @@
 # Continual Learning with GPs
 
-[![](https://img.shields.io/badge/arXiv-2006.05468-red)](https://u.perhapsbay.es/vargp-arxiv)
-[![](https://img.shields.io/badge/ICML-2021-brightgreen)](https://u.perhapsbay.es/vargp)
+[![](https://img.shields.io/badge/arXiv-2006.05468-red)](https://perhapsbay.es/vargp-arxiv)
+[![](https://img.shields.io/badge/ICML-2021-brightgreen)](https://perhapsbay.es/vargp)
 
 This repository hosts the code for 
-[_Variational Auto-Regressive Gaussian Processes for Continual Learning_](https://u.perhapsbay.es/vargp) (**VAR-GPs**)
+[_Variational Auto-Regressive Gaussian Processes for Continual Learning_](https://perhapsbay.es/vargp) (**VAR-GPs**)
 by [Sanyam Kapoor](https://im.perhapsbay.es), 
 [Theofanis Karaletsos](https://karaletsos.com),
 [Thang D. Bui](https://thangbui.github.io).
